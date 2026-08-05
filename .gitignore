@@ -1,0 +1,29 @@
+# Environment
+.env
+.env.local
+backend/.env
+frontend/.env
+
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.egg-info/
+backend/.pytest_cache/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Uploads (runtime data, not source)
+backend/app/uploads/*
+!backend/app/uploads/.gitkeep
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
