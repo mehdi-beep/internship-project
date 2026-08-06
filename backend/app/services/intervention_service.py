@@ -116,11 +116,23 @@ def list_interventions(
     return paginate(db, stmt, page, page_size)
 
 
+def _resolve_display_fields(intervention: Intervention) -> Intervention:
+    # Ch.42/Ch.47 — approver_name and warranty_reference_bi_number are read-only
+    # display conveniences resolved here (not persisted, not accepted as input)
+    # so the frontend never has to show a raw user/intervention ID.
+    intervention.warranty_reference_bi_number = (
+        intervention.warranty_reference.bi_number if intervention.warranty_reference else None
+    )
+    for entry in intervention.approval_history:
+        entry.approver_name = f"{entry.approver.first_name} {entry.approver.last_name}" if entry.approver else None
+    return intervention
+
+
 def get_intervention(db: Session, intervention_id: int) -> Intervention:
     intervention = intervention_repository.get_with_details(db, intervention_id)
     if intervention is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intervention not found.")
-    return intervention
+    return _resolve_display_fields(intervention)
 
 
 def _ensure_visible(intervention: Intervention, current_user_id: int, is_privileged: bool) -> None:

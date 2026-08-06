@@ -85,6 +85,9 @@ class TestFullApprovalLifecycle:
         assert technical_data["status"] == "pending_administrative_approval"
         assert technical_data["technical_approval_date"] is not None
         assert len(technical_data["approval_history"]) == 1
+        # The approver's name is resolved server-side so the review viewer never
+        # has to show a raw user id (Faker.seed(42) makes chef01 = Tracy Rodriguez).
+        assert technical_data["approval_history"][0]["approver_name"] == "Tracy Rodriguez"
 
         # Locked to the technician throughout the pipeline.
         assert client.put(f"/api/interventions/{submitted['id']}", json={}, headers=tech1).status_code in (409, 422)
@@ -105,6 +108,8 @@ class TestFullApprovalLifecycle:
         assert final["status"] == "fully_approved"
         assert final["administrative_approval_date"] is not None
         assert len(final["approval_history"]) == 2
+        admin_entry = next(e for e in final["approval_history"] if e["approval_level"] == "administrative")
+        assert admin_entry["approver_name"] == "Matthew Chapman"
 
         # Fully Approved is permanently locked (Ch.9 State 8) — terminal, no further transitions.
         assert client.post(f"/api/interventions/{submitted['id']}/administrative-approval", json={"decision": "approved"}, headers=admin).status_code == 409

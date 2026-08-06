@@ -75,6 +75,7 @@ class ApprovalHistoryOut(BaseModel):
     id: int
     approval_level: str
     approved_by: int
+    approver_name: str | None = None
     decision: str
     comment: str | None
     approval_date: datetime
@@ -101,6 +102,7 @@ class InterventionOut(BaseModel):
     contract_id: int | None
     project_id: int | None
     warranty_reference_id: int | None
+    warranty_reference_bi_number: str | None = None
     intervention_type: InterventionType
     location_type: LocationType
     intervention_date: date

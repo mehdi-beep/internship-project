@@ -33,6 +33,8 @@ import { listClients } from "../services/clientService";
 import { listSites } from "../services/siteService";
 import { listTravaux } from "../services/travailService";
 import { listTechnicianOptions } from "../services/userService";
+import { listContracts } from "../services/contractService";
+import { listProjects } from "../services/projectService";
 import { useAuthenticatedPreview } from "../hooks/useAuthenticatedPreview";
 import type { ApprovalDecision } from "../services/approvalService";
 import type { Attachment } from "../types/intervention";
@@ -159,6 +161,14 @@ export default function InterventionReviewViewer({
     queryKey: ["users", "technician-options"],
     queryFn: listTechnicianOptions,
   });
+  const { data: contractsData } = useQuery({
+    queryKey: ["contracts", "lookup-all"],
+    queryFn: () => listContracts({ page_size: 100 }),
+  });
+  const { data: projectsData } = useQuery({
+    queryKey: ["projects", "lookup-all"],
+    queryFn: () => listProjects({ page_size: 100 }),
+  });
 
   useEffect(() => {
     setActiveIndex(initialAttachmentIndex);
@@ -190,15 +200,24 @@ export default function InterventionReviewViewer({
   const site = sitesData?.items.find((s) => s.id === intervention?.site_id);
   const travailById = new Map((travauxData?.items ?? []).map((t) => [t.id, t]));
   const technicianNameById = new Map((technicianOptions ?? []).map((t) => [t.id, `${t.first_name} ${t.last_name}`]));
+  const contractName = contractsData?.items.find((c) => c.id === intervention?.contract_id)?.contract_name;
+  const projectName = projectsData?.items.find((p) => p.id === intervention?.project_id)?.project_name;
   const formatDuration = (minutes: number) => `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}`;
 
   return (
     <Dialog open={interventionId !== null} onClose={handleClose} fullScreen>
       <AppBar position="static" color="inherit" sx={{ boxShadow: "none", borderBottom: "1px solid", borderColor: "divider" }}>
         <Toolbar sx={{ gap: 2 }}>
-          <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 600 }}>
-            {intervention ? intervention.bi_number : "Review Intervention"}
-          </Typography>
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
+              {intervention ? intervention.bi_number : "Review Intervention"}
+            </Typography>
+            {!readOnly && (
+              <Typography variant="caption" color="text.secondary">
+                {level === "administrative" ? "Administrative Review" : "Technical Review"}
+              </Typography>
+            )}
+          </Box>
           {intervention && <StatusBadge status={intervention.status} />}
           {intervention && (
             <IconButton onClick={() => navigate(`/interventions/${intervention.id}`)} aria-label="Open full details">
@@ -221,6 +240,10 @@ export default function InterventionReviewViewer({
           <Grid size={{ xs: 12, md: 5 }} sx={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
             <Box sx={{ p: 3, overflow: "auto", flex: 1 }}>
               <Stack spacing={1.5}>
+                <Stack direction="row" spacing={3} sx={{ flexWrap: "wrap", rowGap: 1 }}>
+                  <Field label="BI Number" value={intervention.bi_number} />
+                  <Field label="Status" value={<StatusBadge status={intervention.status} />} />
+                </Stack>
                 <Stack direction="row" spacing={3}>
                   <Field label="Technician" value={technicianNameById.get(intervention.technician_id)} />
                   <Field label="Submitted" value={intervention.submission_date ? dayjs(intervention.submission_date).format("MMM D, YYYY HH:mm") : "—"} />
@@ -230,15 +253,54 @@ export default function InterventionReviewViewer({
                   <Field label="Site" value={site ? `${site.site_name} (${site.city})` : undefined} />
                 </Stack>
                 <Stack direction="row" spacing={3}>
-                  <Field label="Date" value={dayjs(intervention.intervention_date).format("MMM D, YYYY")} />
                   <Field label="Type" value={intervention.intervention_type} />
                   <Field label="Location" value={intervention.location_type === "sur_site" ? "Sur Site" : "Atelier"} />
+                  <Field label="Contact Person" value={intervention.contact_person} />
                 </Stack>
+                {intervention.contract_id && <Field label="Contract" value={contractName ?? `#${intervention.contract_id}`} />}
+                {intervention.project_id && <Field label="Project" value={projectName ?? `#${intervention.project_id}`} />}
+                {intervention.warranty_reference_id && (
+                  <Field
+                    label="Warranty Reference"
+                    value={intervention.warranty_reference_bi_number ?? `#${intervention.warranty_reference_id}`}
+                  />
+                )}
+
+                <Divider />
                 <Stack direction="row" spacing={3}>
+                  <Field label="Date" value={dayjs(intervention.intervention_date).format("MMM D, YYYY")} />
                   <Field label="Start" value={intervention.start_time.slice(0, 5)} />
                   <Field label="End" value={intervention.end_time.slice(0, 5)} />
-                  <Field label="Net Duration" value={formatDuration(intervention.net_duration_minutes)} />
                 </Stack>
+                <Stack direction="row" spacing={3}>
+                  <Field label="Gross Duration" value={formatDuration(intervention.net_duration_minutes + intervention.lunch_break_minutes)} />
+                  <Field label="Lunch Break" value={formatDuration(intervention.lunch_break_minutes)} />
+                  <Field label="Net Duration" value={formatDuration(intervention.net_duration_minutes)} />
+                  <Field label="Points Earned" value={intervention.points_earned} />
+                </Stack>
+
+                <Divider />
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Team
+                  </Typography>
+                  <Stack direction="row" spacing={3} sx={{ mt: 0.5, mb: intervention.colleague_technicians.length ? 1 : 0 }}>
+                    <Field label="Lead Technician" value={technicianNameById.get(intervention.technician_id)} />
+                    <Field label="Number of Technicians" value={intervention.number_of_technicians} />
+                  </Stack>
+                  {intervention.colleague_technicians.length > 0 && (
+                    <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 0.5 }}>
+                      {intervention.colleague_technicians.map((colleague) => (
+                        <Chip
+                          key={colleague.id}
+                          size="small"
+                          label={technicianNameById.get(colleague.user_id) ?? `#${colleague.user_id}`}
+                        />
+                      ))}
+                    </Stack>
+                  )}
+                </Box>
+
                 <Divider />
                 <Box>
                   <Typography variant="caption" color="text.secondary">
@@ -252,11 +314,18 @@ export default function InterventionReviewViewer({
                     ) : (
                       intervention.tasks.map((task) => {
                         const travail = travailById.get(task.travail_id);
-                        return <Chip key={task.id} size="small" label={travail?.travail_code ?? `#${task.travail_id}`} />;
+                        return (
+                          <Chip
+                            key={task.id}
+                            size="small"
+                            label={travail ? `${travail.travail_code} — ${travail.travail_name}` : `#${task.travail_id}`}
+                          />
+                        );
                       })
                     )}
                   </Stack>
                 </Box>
+
                 <Box>
                   <Typography variant="caption" color="text.secondary">
                     Technical Report
@@ -265,22 +334,63 @@ export default function InterventionReviewViewer({
                     {intervention.technical_report || "—"}
                   </Typography>
                 </Box>
-                {level === "administrative" && (
-                  <>
-                    <Divider />
-                    <Typography variant="caption" color="text.secondary">
-                      Technical Approval History
-                    </Typography>
-                    {intervention.approval_history
-                      .filter((entry) => entry.approval_level === "technical")
-                      .map((entry) => (
-                        <Typography key={entry.id} variant="body2">
-                          Approved {dayjs(entry.approval_date).format("MMM D, YYYY HH:mm")}
-                          {entry.comment ? ` — "${entry.comment}"` : ""}
+
+                <Divider />
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Attachments
+                  </Typography>
+                  <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+                    {attachments.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        No attachments.
+                      </Typography>
+                    ) : (
+                      attachments.map((attachment) => (
+                        <Typography key={attachment.id} variant="body2" color={attachment.id === activeAttachment?.id ? "text.primary" : "text.secondary"}>
+                          {attachment.file_name} — {dayjs(attachment.upload_date).format("MMM D, YYYY HH:mm")}
                         </Typography>
+                      ))
+                    )}
+                  </Stack>
+                </Box>
+
+                <Divider />
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Approval History
+                  </Typography>
+                  {intervention.approval_history.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                      No approval decisions recorded yet.
+                    </Typography>
+                  ) : (
+                    <Stack spacing={1} sx={{ mt: 0.5 }}>
+                      {intervention.approval_history.map((entry) => (
+                        <Box key={entry.id}>
+                          <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+                            <Chip
+                              size="small"
+                              label={entry.decision}
+                              color={entry.decision === "approved" ? "success" : "error"}
+                            />
+                            <Typography variant="body2">
+                              {entry.approval_level} — {entry.approver_name ?? `User #${entry.approved_by}`}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {dayjs(entry.approval_date).format("MMM D, YYYY HH:mm")}
+                            </Typography>
+                          </Stack>
+                          {entry.comment && (
+                            <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+                              {entry.comment}
+                            </Typography>
+                          )}
+                        </Box>
                       ))}
-                  </>
-                )}
+                    </Stack>
+                  )}
+                </Box>
               </Stack>
             </Box>
 

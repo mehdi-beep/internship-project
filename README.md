@@ -174,6 +174,76 @@ docker compose up -d
 
 Starts Postgres, backend (with hot reload), and frontend (with hot reload) together.
 
+## Running on Railway
+
+The backend deploys from `backend/Dockerfile`, which now ships working defaults so it
+boots with **zero** Railway dashboard configuration — it points at the same pre-seeded
+`backend/dev.db` used by the local [Quick Start](#quick-start-clone-and-run-immediately)
+above. This section covers what to set, how to deploy, and how to verify it worked.
+
+### Required environment variables
+
+| Variable | Default (baked into the Dockerfile) | Should you change it? |
+|---|---|---|
+| `DATABASE_URL` | `sqlite:///./dev.db` (resolves to `/app/dev.db`, since the container's working directory is `/app`) | Only if you want PostgreSQL instead — point it at a Railway-provisioned Postgres plugin's connection string (`postgresql+psycopg://...`) |
+| `SECRET_KEY` | `dev-secret-key-not-for-production` | **Yes, before sharing the URL with anyone.** This repo is public — the default is visible to anyone who reads it, so anyone could forge valid login tokens against a deployment still using it. Set a real random value as a Railway service variable. |
+| `CORS_ORIGINS` | `*` (allow any origin) | Yes, once your frontend has a real URL — set it to that exact origin (e.g. `https://your-frontend.up.railway.app`), since browsers reject `*` for credentialed requests (this API sends cookies/auth headers) |
+| `JWT_ALGORITHM`, `JWT_EXPIRE_MINUTES`, `UPLOAD_FOLDER`, `MAX_UPLOAD_SIZE`, `APP_NAME`, `DEBUG` | Same defaults as local dev (see `.env.example`) | Optional |
+
+Set any of these as **Railway service variables** (Railway's dashboard → your service →
+Variables) — they override the Dockerfile's `ENV` defaults automatically, no code or
+image change needed.
+
+### Deployment steps
+
+1. In Railway, create a new service from this GitHub repo.
+2. Set the service's **root directory** to `backend/` (Railway needs this since
+   `Dockerfile` lives there, not at the repo root) — Railway will then auto-detect and
+   build from `backend/Dockerfile`.
+3. Set the service's exposed port to `8000` (matches the Dockerfile's `EXPOSE 8000` /
+   the `uvicorn --port 8000` command).
+4. Deploy. With no variables set at all, it will boot successfully using the SQLite
+   defaults above.
+5. Before sharing the deployment URL with anyone, set a real `SECRET_KEY` (see table
+   above) and, once you know your frontend's deployed URL, a matching `CORS_ORIGINS`.
+
+### SQLite on Railway — what works and what to know
+
+Railway's container filesystem is **ephemeral by default**: local disk (including
+`dev.db`) resets to whatever was committed in the image on every new deploy/restart.
+Practically, this means:
+
+- **Works as-is, no extra setup**: the pre-seeded demo data (technicians, clients,
+  interventions, etc. — same dataset as local dev) is always there after every deploy,
+  since it's baked into the image from the committed `backend/dev.db`. This is enough
+  for demos, evaluation, and read-heavy exploration.
+- **Does not persist across redeploys**: any *new* data written while the app is
+  running (new users, new interventions, uploaded attachments) is lost the next time
+  the service redeploys or restarts — the file reverts to its committed contents.
+- **To make writes persistent**, attach a Railway **Volume** to the service and mount
+  it at `/app` (Railway dashboard → your service → Volumes → Add Volume → mount path
+  `/app`). Once mounted, `/app/dev.db` lives on the volume instead of the ephemeral
+  container disk, so it survives redeploys like a normal database would. This is the
+  smallest change that gets you real persistence without switching off SQLite; for a
+  production deployment with concurrent users, PostgreSQL (via `DATABASE_URL`) remains
+  the better fit.
+
+### Verifying a successful deployment
+
+1. Hit `https://<your-service>.up.railway.app/api/health` — expect:
+   ```json
+   {"success":true,"status":"ok","database_connected":true}
+   ```
+2. Confirm the seeded data is actually reachable (not just that the process is alive)
+   by logging in:
+   ```bash
+   curl -X POST https://<your-service>.up.railway.app/api/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"username":"tech01","password":"Password123!"}'
+   ```
+   A successful response includes an `access_token` — confirming both the app booted
+   and the pre-seeded database is being read correctly.
+
 ## Running Tests
 
 The backend has a permanent pytest suite (121 tests) covering authentication, business logic (duration/point calculation, status transitions), planning, interventions, approvals, reference-data CRUD, dashboards, reports, and technician performance:

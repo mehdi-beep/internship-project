@@ -91,6 +91,23 @@ class TestDraftCreation:
         )
         assert response.status_code == 404
 
+    def test_warranty_reference_resolves_to_original_bi_number(self, client, auth_headers, base_payload):
+        # The stored warranty_reference_id is a raw intervention id — the API
+        # resolves it to the referenced BI number so the review viewer never
+        # has to show a bare "#id".
+        tech1 = auth_headers("tech01")
+        original = client.post("/api/interventions", json=base_payload, headers=tech1).json()["data"]
+
+        warranty = client.post(
+            "/api/interventions",
+            json=dict(base_payload, intervention_type="warranty", warranty_reference_bi=original["bi_number"]),
+            headers=tech1,
+        )
+        assert warranty.status_code == 200
+        data = warranty.json()["data"]
+        assert data["warranty_reference_id"] == original["id"]
+        assert data["warranty_reference_bi_number"] == original["bi_number"]
+
 
 class TestSubmission:
     def test_submit_without_attachment_rejected(self, client, auth_headers, base_payload, refs):

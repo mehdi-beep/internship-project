@@ -8,7 +8,7 @@ from app.models.intervention import Intervention
 from app.repositories import approval_history_repository, audit_log_repository, intervention_repository
 from app.schemas.approval import ApprovalDecisionInput, RecentApprovalDecision
 from app.schemas.pagination import Page
-from app.services import notification_service, status_transition_service
+from app.services import intervention_service, notification_service, status_transition_service
 from app.utils.pagination import paginate
 
 
@@ -95,7 +95,7 @@ def decide_technical_approval(
             db, intervention.technician_id, intervention.bi_number, payload.comment, intervention.id
         )
 
-    return intervention_repository.get_with_details(db, intervention.id)
+    return intervention_service.get_intervention(db, intervention.id)
 
 
 def decide_administrative_approval(
@@ -139,4 +139,4 @@ def decide_administrative_approval(
             db, intervention.technician_id, intervention.bi_number, payload.comment, intervention.id
         )
 
-    return intervention_repository.get_with_details(db, intervention.id)
+    return intervention_service.get_intervention(db, intervention.id)

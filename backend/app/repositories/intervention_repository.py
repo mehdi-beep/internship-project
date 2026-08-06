@@ -3,6 +3,7 @@ from datetime import date
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.approval_history import ApprovalHistory
 from app.models.enums import InterventionStatus, InterventionType
 from app.models.intervention import Intervention
 from app.models.intervention_task import InterventionTask
@@ -54,9 +55,10 @@ def get_with_details(db: Session, intervention_id: int) -> Intervention | None:
         .options(
             selectinload(Intervention.tasks),
             selectinload(Intervention.attachments),
-            selectinload(Intervention.approval_history),
+            selectinload(Intervention.approval_history).selectinload(ApprovalHistory.approver),
             selectinload(Intervention.audit_log),
             selectinload(Intervention.colleague_technicians),
+            selectinload(Intervention.warranty_reference),
         )
         .where(Intervention.id == intervention_id)
     )

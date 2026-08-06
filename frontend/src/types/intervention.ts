@@ -23,6 +23,7 @@ export interface ApprovalHistoryEntry {
   id: number;
   approval_level: string;
   approved_by: number;
+  approver_name?: string | null;
   decision: string;
   comment: string | null;
   approval_date: string;
@@ -45,6 +46,7 @@ export interface Intervention {
   contract_id: number | null;
   project_id: number | null;
   warranty_reference_id: number | null;
+  warranty_reference_bi_number?: string | null;
   intervention_type: InterventionType;
   location_type: LocationType;
   intervention_date: string;
