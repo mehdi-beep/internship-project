@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,7 +30,25 @@ logger = logging.getLogger("bims")
 
 settings = get_settings()
 
-app = FastAPI(title=settings.app_name, debug=settings.debug)
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Safety net for a genuinely empty database (e.g. a fresh Volume or a new
+    # Postgres instance with DATABASE_URL pointed at it): both calls below are
+    # no-ops against a database that's already set up, so this is safe to run
+    # unconditionally on every boot. Deployments that ship a pre-seeded file
+    # (e.g. Railway's committed dev.db) are entirely unaffected — nothing here
+    # re-seeds or resets existing data.
+    import app.models  # noqa: F401  registers every table on Base.metadata
+    from app.database import Base, engine
+    from app.database.seed import run as seed_all
+
+    Base.metadata.create_all(engine)
+    seed_all()
+    yield
+
+
+app = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
