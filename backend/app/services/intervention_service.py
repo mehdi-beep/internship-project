@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.enums import AuditAction, InterventionStatus, InterventionType
 from app.models.intervention import Intervention
+from app.models.role import RoleName
 from app.repositories import (
     attachment_repository,
     audit_log_repository,
@@ -14,6 +15,7 @@ from app.repositories import (
     intervention_repository,
     project_repository,
     travail_repository,
+    user_repository,
 )
 from app.schemas.intervention import InterventionCreate, InterventionUpdate
 from app.schemas.pagination import Page
@@ -21,6 +23,19 @@ from app.services import business_logic_service, notification_service, status_tr
 from app.services.status_transition_service import EDITABLE_STATUSES
 from app.utils.bi_number import next_bi_number
 from app.utils.pagination import paginate
+
+
+def _validate_colleague_technicians(db: Session, lead_technician_id: int, colleague_technician_ids: list[int]) -> None:
+    if lead_technician_id in colleague_technician_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="The lead technician cannot also be listed as a colleague."
+        )
+    if len(set(colleague_technician_ids)) != len(colleague_technician_ids):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Duplicate colleague technicians are not allowed.")
+    for colleague_id in colleague_technician_ids:
+        colleague = user_repository.get(db, colleague_id)
+        if colleague is None or not colleague.active or colleague.role.name != RoleName.TECHNICIAN:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Technician {colleague_id} not found.")
 
 
 def _validate_references(db: Session, payload: InterventionCreate) -> tuple[int | None, int | None, int | None]:
@@ -76,12 +91,27 @@ def list_interventions(
     date_from: date | None,
     date_to: date | None,
     search: str | None,
+    colleague_technician_id: int | None = None,
 ) -> Page:
-    # Ch.16 — a technician may only see their own interventions.
+    # Ch.16 — a technician may only see their own interventions. A technician
+    # requesting the colleague_technician_id filter may only ever request it for
+    # themselves (never another technician's participation).
     if not is_privileged:
-        technician_id = current_user_id
+        if colleague_technician_id is not None:
+            colleague_technician_id = current_user_id
+            technician_id = None
+        else:
+            technician_id = current_user_id
     stmt = intervention_repository.list_query(
-        technician_id, client_id, site_id, status_filter, intervention_type, date_from, date_to, search
+        technician_id,
+        client_id,
+        site_id,
+        status_filter,
+        intervention_type,
+        date_from,
+        date_to,
+        search,
+        colleague_technician_id,
     )
     return paginate(db, stmt, page, page_size)
 
@@ -108,6 +138,7 @@ def create_intervention(
     db: Session, payload: InterventionCreate, technician_id: int, submit: bool
 ) -> Intervention:
     contract_id, project_id, warranty_reference_id = _validate_references(db, payload)
+    _validate_colleague_technicians(db, technician_id, payload.colleague_technician_ids)
     net_duration = business_logic_service.calculate_net_duration_minutes(
         payload.start_time, payload.end_time, payload.lunch_break_minutes
     )
@@ -139,6 +170,7 @@ def create_intervention(
         },
     )
     intervention_repository.replace_tasks(db, intervention.id, payload.travail_ids)
+    intervention_repository.replace_colleague_technicians(db, intervention.id, payload.colleague_technician_ids)
     audit_log_repository.create(db, intervention_id=intervention.id, user_id=technician_id, action=AuditAction.CREATED)
 
     if submit:
@@ -159,6 +191,7 @@ def update_intervention(
     status_transition_service.ensure_editable(intervention.status)  # Ch.17 — locked once submitted/approved.
 
     contract_id, project_id, warranty_reference_id = _validate_references(db, payload)
+    _validate_colleague_technicians(db, current_user_id, payload.colleague_technician_ids)
     net_duration = business_logic_service.calculate_net_duration_minutes(
         payload.start_time, payload.end_time, payload.lunch_break_minutes
     )
@@ -190,6 +223,7 @@ def update_intervention(
         },
     )
     intervention_repository.replace_tasks(db, intervention.id, payload.travail_ids)
+    intervention_repository.replace_colleague_technicians(db, intervention.id, payload.colleague_technician_ids)
     audit_log_repository.create(db, intervention_id=intervention.id, user_id=current_user_id, action=AuditAction.MODIFIED)
 
     return get_intervention(db, intervention.id)

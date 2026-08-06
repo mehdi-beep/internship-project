@@ -15,6 +15,16 @@ def list_users(db: Session, page: int, page_size: int, role: RoleName | None, ac
     return paginate(db, stmt, page, page_size)
 
 
+def list_technician_options(db: Session, search: str | None) -> list[User]:
+    stmt = user_repository.list_query(role=RoleName.TECHNICIAN, active_only=True, search=search)
+    return list(db.scalars(stmt).all())
+
+
+def list_chef_options(db: Session) -> list[User]:
+    stmt = user_repository.list_query(role=RoleName.CHEF_TECHNICIEN, active_only=True, search=None)
+    return list(db.scalars(stmt).all())
+
+
 def get_user(db: Session, user_id: int) -> User:
     user = user_repository.get(db, user_id)
     if user is None:

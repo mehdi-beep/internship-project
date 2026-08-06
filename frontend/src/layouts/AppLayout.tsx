@@ -18,7 +18,6 @@ import {
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import DashboardIcon from "@mui/icons-material/DashboardOutlined";
-import CalendarMonthIcon from "@mui/icons-material/CalendarMonthOutlined";
 import AssignmentIcon from "@mui/icons-material/AssignmentOutlined";
 import EventNoteIcon from "@mui/icons-material/EventNoteOutlined";
 import FactCheckIcon from "@mui/icons-material/FactCheckOutlined";
@@ -52,14 +51,12 @@ interface NavItem {
 const NAV_ITEMS_BY_ROLE: Record<UserRole, NavItem[]> = {
   technician: [
     { label: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
-    { label: "My Calendar", icon: <CalendarMonthIcon />, path: "/calendar" },
     { label: "My Interventions", icon: <AssignmentIcon />, path: "/interventions" },
     { label: "Notifications", icon: <NotificationsIcon />, path: "/notifications" },
   ],
   chef_technicien: [
     { label: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
     { label: "Planning", icon: <EventNoteIcon />, path: "/planning" },
-    { label: "Calendar", icon: <CalendarMonthIcon />, path: "/calendar" },
     { label: "Interventions", icon: <AssignmentIcon />, path: "/interventions" },
     { label: "Technical Approvals", icon: <FactCheckIcon />, path: "/approvals/technical" },
     { label: "Reports", icon: <BarChartIcon />, path: "/reports" },
@@ -149,7 +146,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 {user?.first_name} {user?.last_name}
               </Typography>
             )}
-            <Avatar sx={{ width: 32, height: 32 }}>{user?.first_name?.[0]}</Avatar>
+            <IconButton onClick={() => navigate("/profile")} size="small" aria-label="View profile">
+              <Avatar sx={{ width: 32, height: 32 }}>{user?.first_name?.[0]}</Avatar>
+            </IconButton>
             <IconButton onClick={handleLogout} size="small" aria-label="Logout">
               <LogoutIcon fontSize="small" />
             </IconButton>

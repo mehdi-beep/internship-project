@@ -109,9 +109,9 @@ def _weighted_status() -> InterventionStatus:
 
 def _points_for_submission(submission_dt: datetime) -> int:
     """Ch.28 point system — mirrors `business_logic_service.calculate_points()`
-    (Phase 7) so seeded historical data is internally consistent with the real
-    rules. Seed timestamps are already generated as Morocco wall-clock times
-    (this script never converts timezones), so no conversion is needed here —
+    so seeded historical data is internally consistent with the real rules.
+    Seed timestamps are already generated as Morocco wall-clock times (this
+    script never converts timezones), so no conversion is needed here —
     unlike the real service, which converts from UTC before checking the hour."""
     hour = submission_dt.hour
     if 17 <= hour < 19:
@@ -120,9 +120,7 @@ def _points_for_submission(submission_dt: datetime) -> int:
         return 2
     if 22 <= hour < 24:
         return 1
-    if hour < 6:
-        return -2
-    return 0
+    return -1
 
 
 def seed_roles(db: Session) -> dict[str, Role]:
@@ -534,11 +532,20 @@ def seed_notifications(
         ("Administrative Approval Needed", "Intervention {bi} is pending administrative approval."),
         ("Planning Modified", "Your planning for {bi} has been updated."),
     ]
-    all_users = technicians + chefs + admins
+    technicians_by_id = {t.id: t for t in technicians}
     for _ in range(320):
         title, message_template = random.choice(templates)
         intervention = random.choice(interventions)
-        recipient = random.choice(all_users)
+        # The recipient must actually be able to access the referenced
+        # intervention — either its own technician, or a chef/admin (who can
+        # view any intervention via their approval queues). Picking a fully
+        # unrelated recipient here previously produced synthetic notifications
+        # that 403'd on click-through, since the app correctly enforces that a
+        # technician may only view their own interventions.
+        if random.random() < 0.6:
+            recipient = technicians_by_id[intervention.technician_id]
+        else:
+            recipient = random.choice(chefs + admins)
         db.add(
             Notification(
                 user_id=recipient.id,

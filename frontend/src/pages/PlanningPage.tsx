@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import {
   Alert,
   Box,
   Button,
+  Chip,
   CircularProgress,
   MenuItem,
   Stack,
@@ -11,6 +13,7 @@ import {
   Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import { Controller, useForm } from "react-hook-form";
 import dayjs from "dayjs";
 import PlanningCalendar from "../components/PlanningCalendar";
@@ -44,6 +47,8 @@ interface FormValues {
 
 export default function PlanningPage() {
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const highlightId = searchParams.get("highlight");
   const [monthRange] = useState(() => ({
     date_from: dayjs().startOf("month").subtract(1, "month").format("YYYY-MM-DD"),
     date_to: dayjs().endOf("month").add(1, "month").format("YYYY-MM-DD"),
@@ -128,7 +133,7 @@ export default function PlanningPage() {
     onError: () => setErrorMessage("Failed to mark the planning entry as urgent. Please try again."),
   });
 
-  const openCreate = () => {
+  const openCreate = (priority: FormValues["priority"] = "normal") => {
     setEditing(null);
     reset({
       technician_id: 0,
@@ -137,7 +142,7 @@ export default function PlanningPage() {
       planned_date: dayjs().format("YYYY-MM-DD"),
       planned_start_time: "09:00",
       estimated_duration_minutes: 60,
-      priority: "normal",
+      priority,
       notes: "",
     });
     setErrorMessage(null);
@@ -159,6 +164,13 @@ export default function PlanningPage() {
     setErrorMessage(null);
     setModalOpen(true);
   };
+
+  useEffect(() => {
+    if (!highlightId || !planningPage?.items.length) return;
+    const match = planningPage.items.find((p) => p.id === Number(highlightId));
+    if (match) openEdit(match);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightId, planningPage]);
 
   const onSubmit = (values: FormValues) => {
     const startTime = values.planned_start_time.length === 5 ? `${values.planned_start_time}:00` : values.planned_start_time;
@@ -189,16 +201,37 @@ export default function PlanningPage() {
     `${technicianNameById.get(planning.technician_id) ?? "Technician"} — ${clientNameById.get(planning.client_id) ?? "Client"}`;
 
   const activeEntries = (planningPage?.items ?? []).filter((p) => p.status !== "cancelled");
+  const urgentCount = activeEntries.filter((p) => p.priority === "urgent").length;
 
   return (
     <Box>
       <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-        <Typography variant="h5" sx={{ fontWeight: 600 }}>
-          Planning
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-          New Planning
-        </Button>
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+          <Typography variant="h5" sx={{ fontWeight: 600 }}>
+            Planning
+          </Typography>
+          {urgentCount > 0 && (
+            <Chip
+              size="small"
+              color="error"
+              label={`${urgentCount} urgent`}
+              icon={<PriorityHighIcon sx={{ fontSize: 16 }} />}
+            />
+          )}
+        </Stack>
+        <Stack direction="row" spacing={1}>
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<PriorityHighIcon />}
+            onClick={() => openCreate("urgent")}
+          >
+            New Urgent Intervention
+          </Button>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => openCreate()}>
+            New Planning
+          </Button>
+        </Stack>
       </Stack>
 
       {isLoading && (

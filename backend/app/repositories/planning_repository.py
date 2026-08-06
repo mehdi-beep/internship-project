@@ -13,6 +13,7 @@ def list_query(
     date_to: date | None,
     priority: Priority | None,
     status_filter: PlanningStatus | None,
+    created_by: int | None = None,
 ) -> Select:
     stmt = select(Planning)
     if technician_id is not None:
@@ -25,6 +26,8 @@ def list_query(
         stmt = stmt.where(Planning.priority == priority)
     if status_filter is not None:
         stmt = stmt.where(Planning.status == status_filter)
+    if created_by is not None:
+        stmt = stmt.where(Planning.created_by == created_by)
     return stmt.order_by(Planning.planned_date, Planning.planned_start_time)
 
 
@@ -53,3 +56,9 @@ def set_status(db: Session, planning: Planning, status_value: PlanningStatus) ->
     db.commit()
     db.refresh(planning)
     return planning
+
+
+def reorder_urgent_queue(db: Session, ordered_ids: list[int]) -> None:
+    for position, planning_id in enumerate(ordered_ids, start=1):
+        db.query(Planning).filter(Planning.id == planning_id).update({"urgent_queue_position": position})
+    db.commit()

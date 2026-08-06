@@ -168,6 +168,9 @@ export default function ReportsPage() {
 
       {tab === "interventions" && (
         <>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Browse and export activity by day, week, month, year, technician, client, project, or contract.
+          </Typography>
           <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: "wrap", gap: 2 }}>
             <TextField select size="small" label="Report Type" value={reportType} onChange={(e) => setReportType(e.target.value)} sx={{ minWidth: 160 }}>
               {INTERVENTION_REPORT_TYPES.map((t) => (
@@ -229,6 +232,9 @@ export default function ReportsPage() {
 
       {tab === "approval" && (
         <>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Every technical and administrative approval decision, with approver, date, and outcome.
+          </Typography>
           <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
             <TextField size="small" type="date" label="From" slotProps={{ inputLabel: { shrink: true } }} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
             <TextField size="small" type="date" label="To" slotProps={{ inputLabel: { shrink: true } }} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
@@ -262,6 +268,9 @@ export default function ReportsPage() {
 
       {tab === "planning" && (
         <>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Scheduled interventions across the selected date range, including cancelled entries.
+          </Typography>
           <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
             <TextField size="small" type="date" label="From" slotProps={{ inputLabel: { shrink: true } }} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
             <TextField size="small" type="date" label="To" slotProps={{ inputLabel: { shrink: true } }} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
@@ -296,7 +305,7 @@ export default function ReportsPage() {
       {tab === "comparison" && (
         <Box>
           <Alert severity="info" sx={{ mb: 2 }}>
-            Compare two periods side-by-side (Ch.114) — e.g. current month vs previous month, or filter by a
+            Compare two periods side-by-side — e.g. current month vs previous month, or filter by a
             technician/client to compare their activity across periods.
           </Alert>
 

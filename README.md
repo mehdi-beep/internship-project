@@ -8,7 +8,7 @@ Digital replacement for the company's paper-based intervention workflow. See [`p
 
 - **Frontend:** React + TypeScript + Vite + Material UI + React Router + TanStack Query + Axios + React Hook Form + FullCalendar + Day.js
 - **Backend:** Python 3 + FastAPI + SQLAlchemy + Alembic + Pydantic + JWT
-- **Database:** PostgreSQL
+- **Database:** PostgreSQL (production-like setup) — SQLite is also supported for local development/evaluation, via a pre-seeded `backend/dev.db` (see "Quick Start" below)
 
 ## Folder Structure
 
@@ -33,9 +33,11 @@ internship-project/
 │   │   ├── uploads/        # uploaded attachments (gitignored)
 │   │   └── static/
 │   ├── alembic/             # migrations
-│   ├── tests/               # pytest suite (79 tests, see "Running Tests" below)
+│   ├── tests/               # pytest suite (see "Running Tests" below)
 │   ├── main.py
 │   ├── config.py
+│   ├── dev.db               # pre-seeded SQLite database (see "Quick Start")
+│   ├── run_dev_sqlite.py    # zero-setup launcher for the SQLite quick-start path
 │   └── requirements.txt
 └── frontend/
     └── src/
@@ -43,6 +45,42 @@ internship-project/
         ├── services/ api/ context/ routes/ utils/ types/ styles/
         └── App.tsx
 ```
+
+## Quick Start (clone and run immediately)
+
+The repository ships with a pre-seeded SQLite database (`backend/dev.db`), so a fresh
+clone can be running end-to-end in two commands per side — no Docker, no PostgreSQL,
+no manual seed step.
+
+```bash
+# Backend
+cd backend
+python -m venv venv
+./venv/Scripts/activate      # Windows — use `source venv/bin/activate` on macOS/Linux
+pip install -r requirements.txt
+python run_dev_sqlite.py
+```
+
+`run_dev_sqlite.py` points the app at `sqlite:///./dev.db`, creates any missing tables
+(a no-op against the committed schema), and starts the API — it does **not** re-seed or
+reset data, since `dev.db` already contains the full synthetic dataset described below.
+
+```bash
+# Frontend (separate terminal)
+cd frontend
+npm install
+cp .env.example .env
+npm run dev
+```
+
+- App: http://localhost:5173
+- API: http://localhost:8000/api
+- Swagger docs: http://localhost:8000/docs
+
+Log in with any of the [seeded credentials](#seeding-the-database) below (e.g.
+`tech01` / `Password123!`). This path is for local development and evaluation only —
+see "Running the Backend" and "Running the Database" further down for the
+PostgreSQL-backed setup those sections describe.
 
 ## Environment Variables
 
@@ -109,6 +147,9 @@ App: http://localhost:5173
 
 ## Seeding the Database
 
+> If you're using the SQLite quick-start above, `backend/dev.db` is already seeded —
+> skip this section. It only applies to the PostgreSQL setup below.
+
 After `alembic upgrade head` has created the schema, run:
 
 ```bash
@@ -135,7 +176,7 @@ Starts Postgres, backend (with hot reload), and frontend (with hot reload) toget
 
 ## Running Tests
 
-The backend has a permanent pytest suite (79 tests) covering authentication, business logic (duration/point calculation, status transitions), planning, interventions, approvals, reference-data CRUD, dashboards, and reports:
+The backend has a permanent pytest suite (121 tests) covering authentication, business logic (duration/point calculation, status transitions), planning, interventions, approvals, reference-data CRUD, dashboards, reports, and technician performance:
 
 ```bash
 cd backend

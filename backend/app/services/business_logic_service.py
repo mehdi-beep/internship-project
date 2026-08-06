@@ -3,10 +3,6 @@ from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
 
-from config import get_settings
-
-settings = get_settings()
-
 # Ch.28's point windows are wall-clock times for the company's own technicians,
 # who operate in Morocco (Ch.5 examples are all Moroccan cities) — timestamps
 # are stored in UTC everywhere else in the app, so this is the one place that
@@ -30,8 +26,8 @@ def calculate_points(submission_time: datetime) -> int:
     evaluated in the company's local time (Africa/Casablanca), not UTC.
 
     17:00-19:00 -> +5, 19:00-22:00 -> +2, 22:00-24:00 -> +1,
-    after 00:00 (i.e. before the normal working day resumes) -> configurable
-    negative penalty, all other times -> 0.
+    any other hour (00:00-16:59, i.e. after midnight up until the next +5
+    window opens at 17:00) -> flat -1 penalty.
     """
     local_time = submission_time.astimezone(COMPANY_TIMEZONE)
     hour = local_time.hour
@@ -41,6 +37,4 @@ def calculate_points(submission_time: datetime) -> int:
         return 2
     if 22 <= hour < 24:
         return 1
-    if hour < 6:
-        return settings.late_submission_penalty_points
-    return 0
+    return -1

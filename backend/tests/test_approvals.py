@@ -199,3 +199,25 @@ class TestRejectionBranches:
             "travail_ids": [refs["travail_id"]],
         }
         assert client.put(f"/api/interventions/{submitted['id']}", json=edit_payload, headers=tech1).status_code == 200
+
+
+class TestMyRecentDecisions:
+    def test_reflects_own_decisions_only(self, client, auth_headers, refs):
+        tech1 = auth_headers("tech01")
+        chef1 = auth_headers("chef01")
+        chef2 = auth_headers("chef02")
+        submitted = _create_submitted(client, tech1, refs)
+
+        client.post(
+            f"/api/interventions/{submitted['id']}/technical-approval", json={"decision": "approved"}, headers=chef1
+        )
+
+        chef1_decisions = client.get("/api/approvals/my-recent-decisions", headers=chef1).json()["data"]
+        assert any(d["intervention_id"] == submitted["id"] and d["approval_level"] == "technical" for d in chef1_decisions)
+
+        chef2_decisions = client.get("/api/approvals/my-recent-decisions", headers=chef2).json()["data"]
+        assert all(d["intervention_id"] != submitted["id"] for d in chef2_decisions)
+
+    def test_technician_cannot_access(self, client, auth_headers):
+        response = client.get("/api/approvals/my-recent-decisions", headers=auth_headers("tech01"))
+        assert response.status_code == 403

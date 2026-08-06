@@ -4,6 +4,7 @@ export interface Notification {
   title: string;
   message: string;
   related_intervention_id: number | null;
+  related_planning_id: number | null;
   read: boolean;
   created_at: string;
 }

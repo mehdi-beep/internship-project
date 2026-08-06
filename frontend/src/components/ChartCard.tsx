@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Card, CardContent, Typography } from "@mui/material";
 
 interface ChartCardProps {
-  title: string;
+  title: ReactNode;
   children: ReactNode;
   height?: number;
 }

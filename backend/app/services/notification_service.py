@@ -24,39 +24,43 @@ def mark_all_read(db: Session, user_id: int) -> int:
     return notification_repository.mark_all_read(db, user_id)
 
 
-def notify_new_assignment(db: Session, technician_id: int, bi_reference: str) -> None:
+def notify_new_assignment(db: Session, technician_id: int, bi_reference: str, planning_id: int) -> None:
     notification_repository.create(
         db,
         user_id=technician_id,
         title="New Planning Assignment",
         message=f"You have been assigned a new planned intervention ({bi_reference}).",
+        related_planning_id=planning_id,
     )
 
 
-def notify_urgent_assignment(db: Session, technician_id: int, bi_reference: str) -> None:
+def notify_urgent_assignment(db: Session, technician_id: int, bi_reference: str, planning_id: int) -> None:
     notification_repository.create(
         db,
         user_id=technician_id,
         title="Urgent Intervention Assigned",
         message=f"An urgent intervention ({bi_reference}) requires your immediate attention.",
+        related_planning_id=planning_id,
     )
 
 
-def notify_planning_modified(db: Session, technician_id: int, bi_reference: str) -> None:
+def notify_planning_modified(db: Session, technician_id: int, bi_reference: str, planning_id: int) -> None:
     notification_repository.create(
         db,
         user_id=technician_id,
         title="Planning Modified",
         message=f"Your planned intervention ({bi_reference}) has been updated.",
+        related_planning_id=planning_id,
     )
 
 
-def notify_planning_cancelled(db: Session, technician_id: int, bi_reference: str) -> None:
+def notify_planning_cancelled(db: Session, technician_id: int, bi_reference: str, planning_id: int) -> None:
     notification_repository.create(
         db,
         user_id=technician_id,
         title="Planning Cancelled",
         message=f"Your planned intervention ({bi_reference}) has been cancelled.",
+        related_planning_id=planning_id,
     )
 
 

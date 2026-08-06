@@ -16,8 +16,10 @@ class Notification(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     message: Mapped[str] = mapped_column(String(500), nullable=False)
     related_intervention_id: Mapped[int | None] = mapped_column(ForeignKey("interventions.id"), nullable=True)
+    related_planning_id: Mapped[int | None] = mapped_column(ForeignKey("planning.id"), nullable=True)
     read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     user: Mapped["User"] = relationship()
     related_intervention: Mapped["Intervention | None"] = relationship()
+    related_planning: Mapped["Planning | None"] = relationship()

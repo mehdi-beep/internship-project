@@ -180,3 +180,87 @@ class TestAttachmentValidation:
             headers=tech1,
         )
         assert response.status_code == 400
+
+
+class TestColleagueTechnicians:
+    def test_create_with_colleagues_visible_on_detail(self, client, auth_headers, base_payload):
+        tech1 = auth_headers("tech01")
+        tech2_id = client.get("/api/auth/me", headers=auth_headers("tech02")).json()["data"]["id"]
+        payload = dict(base_payload, colleague_technician_ids=[tech2_id])
+        created = client.post("/api/interventions", json=payload, headers=tech1).json()["data"]
+        detail = client.get(f"/api/interventions/{created['id']}", headers=tech1).json()["data"]
+        assert [c["user_id"] for c in detail["colleague_technicians"]] == [tech2_id]
+
+    def test_lead_technician_cannot_be_own_colleague(self, client, auth_headers, base_payload):
+        tech1 = auth_headers("tech01")
+        tech1_id = client.get("/api/auth/me", headers=tech1).json()["data"]["id"]
+        payload = dict(base_payload, colleague_technician_ids=[tech1_id])
+        response = client.post("/api/interventions", json=payload, headers=tech1)
+        assert response.status_code == 400
+
+    def test_duplicate_colleagues_rejected(self, client, auth_headers, base_payload):
+        tech1 = auth_headers("tech01")
+        tech2_id = client.get("/api/auth/me", headers=auth_headers("tech02")).json()["data"]["id"]
+        payload = dict(base_payload, colleague_technician_ids=[tech2_id, tech2_id])
+        response = client.post("/api/interventions", json=payload, headers=tech1)
+        assert response.status_code == 400
+
+    def test_nonexistent_colleague_rejected(self, client, auth_headers, base_payload):
+        tech1 = auth_headers("tech01")
+        payload = dict(base_payload, colleague_technician_ids=[999999])
+        response = client.post("/api/interventions", json=payload, headers=tech1)
+        assert response.status_code == 400
+
+    def test_non_technician_colleague_rejected(self, client, auth_headers, base_payload):
+        tech1 = auth_headers("tech01")
+        chef_id = client.get("/api/auth/me", headers=auth_headers("chef01")).json()["data"]["id"]
+        payload = dict(base_payload, colleague_technician_ids=[chef_id])
+        response = client.post("/api/interventions", json=payload, headers=tech1)
+        assert response.status_code == 400
+
+    def test_colleague_technician_id_filter_returns_participations(self, client, auth_headers, base_payload):
+        tech1 = auth_headers("tech01")
+        tech2_headers = auth_headers("tech02")
+        tech2_id = client.get("/api/auth/me", headers=tech2_headers).json()["data"]["id"]
+        payload = dict(base_payload, colleague_technician_ids=[tech2_id])
+        created = client.post("/api/interventions", json=payload, headers=tech1).json()["data"]
+
+        results = client.get(
+            "/api/interventions", headers=tech2_headers, params={"colleague_technician_id": tech2_id}
+        ).json()["data"]["items"]
+        assert any(i["id"] == created["id"] for i in results)
+
+
+class TestChefOptionsEndpoint:
+    def test_reachable_by_chef_and_admin_not_technician(self, client, auth_headers):
+        assert client.get("/api/users/chefs", headers=auth_headers("chef01")).status_code == 200
+        assert client.get("/api/users/chefs", headers=auth_headers("admin01")).status_code == 200
+        assert client.get("/api/users/chefs", headers=auth_headers("tech01")).status_code == 403
+
+    def test_returns_only_chef_role_users(self, client, auth_headers):
+        options = client.get("/api/users/chefs", headers=auth_headers("chef01")).json()["data"]
+        assert len(options) > 0
+        chef1_id = client.get("/api/auth/me", headers=auth_headers("chef01")).json()["data"]["id"]
+        assert any(o["id"] == chef1_id for o in options)
+
+
+class TestTechnicianOptionsEndpoint:
+    def test_reachable_by_all_three_roles(self, client, auth_headers):
+        for username in ("tech01", "chef01", "admin01"):
+            response = client.get("/api/users/technicians", headers=auth_headers(username))
+            assert response.status_code == 200
+            assert isinstance(response.json()["data"], list)
+
+    def test_returns_only_active_technicians(self, client, auth_headers):
+        options = client.get("/api/users/technicians", headers=auth_headers("tech01")).json()["data"]
+        assert len(options) > 0
+        me = client.get("/api/auth/me", headers=auth_headers("chef01")).json()["data"]
+        assert all(o["id"] != me["id"] for o in options)
+
+    def test_search_filters_results(self, client, auth_headers):
+        all_options = client.get("/api/users/technicians", headers=auth_headers("tech01")).json()["data"]
+        target = all_options[0]
+        filtered = client.get(
+            "/api/users/technicians", headers=auth_headers("tech01"), params={"search": target["last_name"]}
+        ).json()["data"]
+        assert any(o["id"] == target["id"] for o in filtered)

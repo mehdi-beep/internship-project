@@ -7,6 +7,7 @@ from app.models.project import Project
 from app.models.travail import Travail
 from app.models.intervention import Intervention
 from app.models.intervention_task import InterventionTask
+from app.models.intervention_technician import InterventionTechnician
 from app.models.attachment import Attachment
 from app.models.planning import Planning
 from app.models.notification import Notification
@@ -23,6 +24,7 @@ __all__ = [
     "Travail",
     "Intervention",
     "InterventionTask",
+    "InterventionTechnician",
     "Attachment",
     "Planning",
     "Notification",

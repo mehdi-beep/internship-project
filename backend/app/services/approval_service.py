@@ -6,10 +6,24 @@ from sqlalchemy.orm import Session
 from app.models.enums import ApprovalDecision, ApprovalLevel, AuditAction, InterventionStatus
 from app.models.intervention import Intervention
 from app.repositories import approval_history_repository, audit_log_repository, intervention_repository
-from app.schemas.approval import ApprovalDecisionInput
+from app.schemas.approval import ApprovalDecisionInput, RecentApprovalDecision
 from app.schemas.pagination import Page
 from app.services import notification_service, status_transition_service
 from app.utils.pagination import paginate
+
+
+def list_my_recent_decisions(db: Session, approver_id: int) -> list[RecentApprovalDecision]:
+    rows = approval_history_repository.list_recent_by_approver(db, approver_id)
+    return [
+        RecentApprovalDecision(
+            intervention_id=entry.intervention_id,
+            bi_number=bi_number,
+            approval_level=entry.approval_level,
+            decision=entry.decision,
+            approval_date=entry.approval_date,
+        )
+        for entry, bi_number in rows
+    ]
 
 
 def list_technical_pending(db: Session, page: int, page_size: int) -> Page:

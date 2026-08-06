@@ -66,6 +66,7 @@ def client():
             "app.models.travail",
             "app.models.intervention",
             "app.models.intervention_task",
+            "app.models.intervention_technician",
             "app.models.attachment",
             "app.models.planning",
             "app.models.notification",

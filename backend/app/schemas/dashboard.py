@@ -19,14 +19,6 @@ class PlanningSummary(BaseModel):
     status: str
 
 
-class NotificationSummary(BaseModel):
-    id: int
-    title: str
-    message: str
-    read: bool
-    created_at: str
-
-
 class InterventionSummary(BaseModel):
     id: int
     bi_number: str
@@ -43,10 +35,10 @@ class TechnicianDashboard(BaseModel):
     completed_today: int
     pending_approval: int
     rejected: int
+    draft_count: int
     monthly_points: int
     average_daily_duration_minutes: float
     today_planning: list[PlanningSummary]
-    recent_notifications: list[NotificationSummary]
     recently_completed: list[InterventionSummary]
     weekly_completed_chart: list[ChartPoint]
     monthly_points_chart: list[ChartPoint]
@@ -82,6 +74,32 @@ class AdminDashboard(BaseModel):
     monthly_interventions_chart: list[ChartPoint]
     approval_rate: float
     rejection_rate: float
+    points_distribution_chart: list[ChartPoint]
+    client_activity_chart: list[ChartPoint]
+    city_activity_chart: list[ChartPoint]
+
+
+# --- Mode-aware "single selected period" chart bundles (Round 3) ---
+# Distinct from the *Dashboard schemas above, whose embedded chart fields
+# keep their original trailing-window default behavior for first-load
+# rendering. These bundles back the new /charts endpoints, where every
+# chart is scoped to exactly the one day/week/month the user picks.
+
+
+class TechnicianDashboardCharts(BaseModel):
+    completed_chart: list[ChartPoint]
+    points_chart: list[ChartPoint]
+
+
+class ChefDashboardCharts(BaseModel):
+    interventions_by_technician_chart: list[ChartPoint]
+    interventions_by_client_chart: list[ChartPoint]
+    activity_chart: list[ChartPoint]
+    technician_workload: list[ChartPoint]
+
+
+class AdminDashboardCharts(BaseModel):
+    interventions_chart: list[ChartPoint]
     points_distribution_chart: list[ChartPoint]
     client_activity_chart: list[ChartPoint]
     city_activity_chart: list[ChartPoint]

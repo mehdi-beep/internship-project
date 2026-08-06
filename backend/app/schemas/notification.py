@@ -11,5 +11,6 @@ class NotificationOut(BaseModel):
     title: str
     message: str
     related_intervention_id: int | None
+    related_planning_id: int | None
     read: bool
     created_at: datetime

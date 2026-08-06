@@ -24,6 +24,7 @@ class InterventionCreate(BaseModel):
 
     number_of_technicians: int = 1
     travail_ids: list[int] = []
+    colleague_technician_ids: list[int] = []
     technical_report: str | None = None
 
     @model_validator(mode="after")
@@ -48,6 +49,13 @@ class InterventionTaskOut(BaseModel):
 
     id: int
     travail_id: int
+
+
+class InterventionTechnicianOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
 
 
 class AttachmentOut(BaseModel):
@@ -117,3 +125,4 @@ class InterventionDetailOut(InterventionOut):
     attachments: list[AttachmentOut] = []
     approval_history: list[ApprovalHistoryOut] = []
     audit_log: list[AuditLogOut] = []
+    colleague_technicians: list[InterventionTechnicianOut] = []

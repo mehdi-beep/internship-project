@@ -1,6 +1,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -19,6 +20,20 @@ router = APIRouter(prefix="/planning", tags=["planning"])
 ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor")
 
 
+class UrgentQueueReorderInput(BaseModel):
+    ordered_ids: list[int]
+
+
+@router.put("/urgent-queue/reorder", response_model=ApiResponse[None])
+def reorder_urgent_queue(
+    payload: UrgentQueueReorderInput,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("chef_technicien")),
+) -> ApiResponse[None]:
+    planning_service.reorder_urgent_queue(db, payload.ordered_ids)
+    return ApiResponse(message="Urgent queue reordered.")
+
+
 @router.get("", response_model=ApiResponse[Page[PlanningOut]])
 def list_planning(
     page: int = Query(1, ge=1),
@@ -28,6 +43,7 @@ def list_planning(
     date_to: date | None = None,
     priority: Priority | None = None,
     status_filter: PlanningStatus | None = Query(None, alias="status"),
+    created_by: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*ALL_ROLES)),
 ) -> ApiResponse[Page[PlanningOut]]:
@@ -37,7 +53,9 @@ def list_planning(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
         technician_id = current_user.id
 
-    result = planning_service.list_planning(db, page, page_size, technician_id, date_from, date_to, priority, status_filter)
+    result = planning_service.list_planning(
+        db, page, page_size, technician_id, date_from, date_to, priority, status_filter, created_by
+    )
     return ApiResponse(
         data=Page(
             items=[PlanningOut.model_validate(p) for p in result.items],

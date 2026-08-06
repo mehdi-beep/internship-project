@@ -5,6 +5,11 @@ export interface InterventionTask {
   travail_id: number;
 }
 
+export interface InterventionTechnician {
+  id: number;
+  user_id: number;
+}
+
 export interface Attachment {
   id: number;
   file_name: string;
@@ -64,4 +69,5 @@ export interface InterventionDetail extends Intervention {
   attachments: Attachment[];
   approval_history: ApprovalHistoryEntry[];
   audit_log: AuditLogEntry[];
+  colleague_technicians: InterventionTechnician[];
 }

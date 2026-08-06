@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import dayjs from "dayjs";
 import {
   Chip,
   Grid,
@@ -12,7 +14,9 @@ import StatTile from "../../components/StatTile";
 import ChartCard from "../../components/ChartCard";
 import SimpleBarChart from "../../components/SimpleBarChart";
 import QueryStateGate from "../../components/QueryStateGate";
-import { getSupervisorDashboard } from "../../services/dashboardService";
+import PeriodModeSelector, { type PeriodMode } from "../../components/PeriodModeSelector";
+import UrgentQueueList from "../../components/UrgentQueueList";
+import { getSupervisorDashboard, getSupervisorDashboardCharts } from "../../services/dashboardService";
 import { priorityColors } from "../../styles/theme";
 import type { ChefDashboard } from "../../types/dashboard";
 
@@ -30,6 +34,14 @@ export default function ChefDashboardContent() {
 }
 
 function ChefDashboardBody({ data }: { data: ChefDashboard }) {
+  const [mode, setMode] = useState<PeriodMode>("monthly");
+  const [anchor, setAnchor] = useState(() => dayjs().startOf("month").format("YYYY-MM-DD"));
+
+  const { data: charts } = useQuery({
+    queryKey: ["dashboard", "supervisor", "charts", mode, anchor],
+    queryFn: () => getSupervisorDashboardCharts(mode, anchor),
+  });
+
   return (
     <Stack spacing={3}>
       <Grid container spacing={2}>
@@ -53,31 +65,33 @@ function ChefDashboardBody({ data }: { data: ChefDashboard }) {
         </Grid>
       </Grid>
 
+      <PeriodModeSelector mode={mode} anchor={anchor} onModeChange={setMode} onAnchorChange={setAnchor} />
+
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
           <ChartCard title="Interventions by Technician">
-            <SimpleBarChart data={data.interventions_by_technician_chart} colorIndex={0} />
+            <SimpleBarChart data={charts?.interventions_by_technician_chart ?? []} colorIndex={0} />
           </ChartCard>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
           <ChartCard title="Interventions by Client">
-            <SimpleBarChart data={data.interventions_by_client_chart} colorIndex={2} />
+            <SimpleBarChart data={charts?.interventions_by_client_chart ?? []} colorIndex={2} />
           </ChartCard>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <ChartCard title="Daily Activity (This Week)">
-            <SimpleBarChart data={data.daily_activity_chart} colorIndex={1} />
+          <ChartCard title="Activity">
+            <SimpleBarChart data={charts?.activity_chart ?? []} colorIndex={1} />
           </ChartCard>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <ChartCard title="Weekly Activity (Last 4 Weeks)">
-            <SimpleBarChart data={data.weekly_activity_chart} colorIndex={3} />
+          <ChartCard title="Technician Workload">
+            <SimpleBarChart data={charts?.technician_workload ?? []} colorIndex={4} emptyLabel="No planning assigned for this period." />
           </ChartCard>
         </Grid>
       </Grid>
 
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 4 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <ChartCard title="Today's Planning" height={260}>
             {data.today_planning.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
@@ -95,26 +109,9 @@ function ChefDashboardBody({ data }: { data: ChefDashboard }) {
             )}
           </ChartCard>
         </Grid>
-        <Grid size={{ xs: 12, md: 4 }}>
-          <ChartCard title="Technician Workload (This Week)" height={260}>
-            <SimpleBarChart data={data.technician_workload} colorIndex={4} emptyLabel="No planning assigned this week." />
-          </ChartCard>
-        </Grid>
-        <Grid size={{ xs: 12, md: 4 }}>
-          <ChartCard title="Urgent Queue" height={260}>
-            {data.urgent_queue.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                No urgent interventions.
-              </Typography>
-            ) : (
-              <List dense sx={{ overflow: "auto", maxHeight: 260 }}>
-                {data.urgent_queue.map((p) => (
-                  <ListItem key={p.id} divider>
-                    <ListItemText primary={`${p.planned_start_time.slice(0, 5)} — ${p.client_name}`} secondary={p.site_name} />
-                  </ListItem>
-                ))}
-              </List>
-            )}
+        <Grid size={{ xs: 12, md: 6 }}>
+          <ChartCard title="Urgent Queue (drag to reorder)" height={260}>
+            <UrgentQueueList entries={data.urgent_queue} />
           </ChartCard>
         </Grid>
       </Grid>

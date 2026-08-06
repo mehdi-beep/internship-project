@@ -12,6 +12,7 @@ export interface PlanningListParams {
   date_to?: string;
   priority?: Priority;
   status?: PlanningStatus;
+  created_by?: number;
 }
 
 export interface PlanningCreateInput {
@@ -39,6 +40,9 @@ export const getPlanning = (id: number) => fetchOne<Planning>(`/planning/${id}`)
 export const createPlanning = (input: PlanningCreateInput) => postOne<Planning>("/planning", input);
 export const updatePlanning = (id: number, input: PlanningUpdateInput) => putOne<Planning>(`/planning/${id}`, input);
 export const markPlanningUrgent = (id: number) => postOne<Planning>(`/planning/${id}/urgent`);
+
+export const reorderUrgentQueue = (orderedIds: number[]) =>
+  apiClient.put("/planning/urgent-queue/reorder", { ordered_ids: orderedIds });
 
 export async function cancelPlanning(id: number): Promise<Planning> {
   const { data } = await apiClient.delete<ApiResponse<Planning>>(`/planning/${id}`);

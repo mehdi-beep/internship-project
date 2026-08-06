@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -14,7 +14,7 @@ import PhotoCameraIcon from "@mui/icons-material/PhotoCameraOutlined";
 import UploadFileIcon from "@mui/icons-material/UploadFileOutlined";
 import DeleteIcon from "@mui/icons-material/DeleteOutlined";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdfOutlined";
-import { apiClient } from "../api/client";
+import { useAuthenticatedPreview } from "../hooks/useAuthenticatedPreview";
 import type { Attachment } from "../types/intervention";
 
 const ACCEPTED = "image/jpeg,image/png,application/pdf";
@@ -25,49 +25,28 @@ interface AttachmentUploaderProps {
   onUpload: (file: File) => Promise<void>;
   onDelete: (attachmentId: number) => Promise<void>;
   readOnly?: boolean;
-}
-
-/** Fetches an attachment through the authenticated axios client and exposes it as an object URL. */
-function useAuthenticatedPreview(attachment: Attachment): string | null {
-  const [url, setUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let objectUrl: string | null = null;
-    let cancelled = false;
-
-    apiClient
-      .get(`/attachments/${attachment.id}/download`, { responseType: "blob" })
-      .then((res) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(res.data as Blob);
-        setUrl(objectUrl);
-      })
-      .catch(() => setUrl(null));
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [attachment.id]);
-
-  return url;
+  /** Opens the full-screen review viewer at this attachment's index when the thumbnail is clicked. */
+  onImageClick?: (attachmentIndex: number) => void;
 }
 
 function AttachmentCard({
   attachment,
   onDelete,
   readOnly,
+  onClick,
 }: {
   attachment: Attachment;
   onDelete: (id: number) => Promise<void>;
   readOnly: boolean;
+  onClick?: () => void;
 }) {
-  const previewUrl = useAuthenticatedPreview(attachment);
+  const previewUrl = useAuthenticatedPreview(attachment.id);
   const isPdf = attachment.content_type === "application/pdf";
 
   return (
     <Card variant="outlined" sx={{ width: 200 }}>
       <Box
+        onClick={onClick}
         sx={{
           height: 140,
           display: "flex",
@@ -75,6 +54,7 @@ function AttachmentCard({
           justifyContent: "center",
           bgcolor: "action.hover",
           overflow: "hidden",
+          cursor: onClick ? "pointer" : "default",
         }}
       >
         {isPdf ? (
@@ -106,6 +86,7 @@ export default function AttachmentUploader({
   onUpload,
   onDelete,
   readOnly = false,
+  onImageClick,
 }: AttachmentUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -185,12 +166,13 @@ export default function AttachmentUploader({
         </Typography>
       ) : (
         <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", gap: 2 }}>
-          {attachments.map((attachment) => (
+          {attachments.map((attachment, index) => (
             <AttachmentCard
               key={attachment.id}
               attachment={attachment}
               onDelete={onDelete}
               readOnly={readOnly}
+              onClick={onImageClick ? () => onImageClick(index) : undefined}
             />
           ))}
         </Stack>

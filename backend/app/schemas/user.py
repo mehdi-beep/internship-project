@@ -43,6 +43,14 @@ class PasswordReset(BaseModel):
     new_password: str = Field(min_length=8)
 
 
+class TechnicianOptionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    first_name: str
+    last_name: str
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

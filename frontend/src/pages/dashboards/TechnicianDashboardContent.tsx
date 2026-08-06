@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import dayjs from "dayjs";
 import {
   Button,
   Chip,
@@ -11,13 +13,13 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import dayjs from "dayjs";
 import StatTile from "../../components/StatTile";
 import ChartCard from "../../components/ChartCard";
 import SimpleBarChart from "../../components/SimpleBarChart";
 import SimpleLineChart from "../../components/SimpleLineChart";
 import QueryStateGate from "../../components/QueryStateGate";
-import { getTechnicianDashboard } from "../../services/dashboardService";
+import PeriodModeSelector, { type PeriodMode } from "../../components/PeriodModeSelector";
+import { getTechnicianDashboard, getTechnicianDashboardCharts } from "../../services/dashboardService";
 import { priorityColors } from "../../styles/theme";
 import type { TechnicianDashboard } from "../../types/dashboard";
 
@@ -36,6 +38,13 @@ export default function TechnicianDashboardContent() {
 
 function TechnicianDashboardBody({ data }: { data: TechnicianDashboard }) {
   const navigate = useNavigate();
+  const [mode, setMode] = useState<PeriodMode>("monthly");
+  const [anchor, setAnchor] = useState(() => dayjs().startOf("month").format("YYYY-MM-DD"));
+
+  const { data: charts } = useQuery({
+    queryKey: ["dashboard", "technician", "charts", mode, anchor],
+    queryFn: () => getTechnicianDashboardCharts(mode, anchor),
+  });
 
   return (
     <Stack spacing={3}>
@@ -64,23 +73,22 @@ function TechnicianDashboardBody({ data }: { data: TechnicianDashboard }) {
         <Button variant="contained" onClick={() => navigate("/interventions/new")}>
           New Intervention
         </Button>
-        <Button variant="outlined" onClick={() => navigate("/calendar")}>
-          My Calendar
-        </Button>
         <Button variant="outlined" onClick={() => navigate("/interventions")}>
           My Interventions
         </Button>
       </Stack>
 
+      <PeriodModeSelector mode={mode} anchor={anchor} onModeChange={setMode} onAnchorChange={setAnchor} />
+
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
-          <ChartCard title="Weekly Completed Interventions">
-            <SimpleBarChart data={data.weekly_completed_chart} colorIndex={0} />
+          <ChartCard title="Completed Interventions">
+            <SimpleBarChart data={charts?.completed_chart ?? []} colorIndex={0} />
           </ChartCard>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <ChartCard title="Monthly Points Earned">
-            <SimpleLineChart data={data.monthly_points_chart} colorIndex={3} />
+          <ChartCard title="Points Earned">
+            <SimpleLineChart data={charts?.points_chart ?? []} colorIndex={3} />
           </ChartCard>
         </Grid>
       </Grid>
@@ -108,27 +116,25 @@ function TechnicianDashboardBody({ data }: { data: TechnicianDashboard }) {
           </ChartCard>
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
-          <ChartCard title="Recent Notifications" height={260}>
-            {data.recent_notifications.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                No notifications.
-              </Typography>
-            ) : (
-              <List dense sx={{ overflow: "auto", maxHeight: 260 }}>
-                {data.recent_notifications.map((n) => (
-                  <ListItem key={n.id} divider>
-                    <ListItemText
-                      primary={
-                        <Typography component="span" sx={{ fontWeight: n.read ? 400 : 700 }}>
-                          {n.title}
-                        </Typography>
-                      }
-                      secondary={dayjs(n.created_at).format("MMM D, HH:mm")}
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            )}
+          <ChartCard title="Draft / Pending Actions" height={260}>
+            <Stack spacing={2}>
+              <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                <Typography variant="body2">Draft</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  {data.draft_count}
+                </Typography>
+              </Stack>
+              <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                <Typography variant="body2">Rejected</Typography>
+                <Typography
+                  variant="body2"
+                  sx={{ fontWeight: 700 }}
+                  color={data.rejected > 0 ? "error" : undefined}
+                >
+                  {data.rejected}
+                </Typography>
+              </Stack>
+            </Stack>
           </ChartCard>
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>

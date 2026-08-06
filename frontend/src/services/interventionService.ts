@@ -15,6 +15,7 @@ export interface InterventionListParams {
   date_from?: string;
   date_to?: string;
   search?: string;
+  colleague_technician_id?: number;
 }
 
 export interface InterventionInput {
@@ -32,6 +33,7 @@ export interface InterventionInput {
   lunch_break_minutes: number;
   number_of_technicians: number;
   travail_ids: number[];
+  colleague_technician_ids: number[];
   technical_report?: string | null;
 }
 

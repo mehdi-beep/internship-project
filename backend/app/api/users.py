@@ -7,7 +7,7 @@ from app.models.role import RoleName
 from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.schemas.pagination import Page
-from app.schemas.user import PasswordReset, UserCreate, UserOut, UserUpdate
+from app.schemas.user import PasswordReset, TechnicianOptionOut, UserCreate, UserOut, UserUpdate
 from app.services import user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -39,6 +39,32 @@ def list_users(
             pages=result.pages,
         )
     )
+
+
+@router.get("/technicians", response_model=ApiResponse[list[TechnicianOptionOut]])
+def list_technician_options(
+    search: str | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("technician", "chef_technicien", "admin_supervisor")),
+) -> ApiResponse[list[TechnicianOptionOut]]:
+    # A lightweight, all-roles-accessible lookup for colleague-technician pickers
+    # (Ch.22 Section F) — unlike GET /users, this is intentionally reachable by a
+    # technician JWT since the picker is used on the technician's own intervention form.
+    technicians = user_service.list_technician_options(db, search)
+    return ApiResponse(data=[TechnicianOptionOut.model_validate(t) for t in technicians])
+
+
+@router.get("/chefs", response_model=ApiResponse[list[TechnicianOptionOut]])
+def list_chef_options(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("chef_technicien", "admin_supervisor")),
+) -> ApiResponse[list[TechnicianOptionOut]]:
+    # A lightweight lookup of active Chef des Techniciens, used to display the
+    # "Supervising Role" section on the Technician Profile page — reachable by
+    # chef JWTs too (unlike GET /users, which restricts chefs to role=technician
+    # only per Ch.12) since a chef legitimately views this same profile page.
+    chefs = user_service.list_chef_options(db)
+    return ApiResponse(data=[TechnicianOptionOut.model_validate(c) for c in chefs])
 
 
 @router.get("/{user_id}", response_model=ApiResponse[UserOut])

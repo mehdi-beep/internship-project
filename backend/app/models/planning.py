@@ -26,6 +26,7 @@ class Planning(Base):
         Enum(PlanningStatus, name="planning_status"), nullable=False, default=PlanningStatus.PLANNED
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    urgent_queue_position: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
 
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
 

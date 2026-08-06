@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
+from typing import Literal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -10,16 +11,19 @@ from app.models.enums import InterventionStatus, Priority
 from app.models.planning import Planning
 from app.models.role import RoleName
 from app.models.user import User
-from app.repositories import notification_repository
 from app.schemas.dashboard import (
     AdminDashboard,
+    AdminDashboardCharts,
     ChartPoint,
     ChefDashboard,
+    ChefDashboardCharts,
     InterventionSummary,
-    NotificationSummary,
     PlanningSummary,
     TechnicianDashboard,
+    TechnicianDashboardCharts,
 )
+
+PeriodMode = Literal["daily", "weekly", "monthly"]
 
 APPROVAL_PENDING_STATUSES = (
     InterventionStatus.SUBMITTED,
@@ -75,6 +79,12 @@ def get_technician_dashboard(db: Session, technician_id: int) -> TechnicianDashb
         .where(Intervention.technician_id == technician_id, Intervention.status == InterventionStatus.REJECTED)
     ) or 0
 
+    draft_count = db.scalar(
+        select(func.count())
+        .select_from(Intervention)
+        .where(Intervention.technician_id == technician_id, Intervention.status == InterventionStatus.DRAFT)
+    ) or 0
+
     monthly_points = db.scalar(
         select(func.coalesce(func.sum(Intervention.points_earned), 0)).where(
             Intervention.technician_id == technician_id, Intervention.submission_date >= month_start
@@ -106,14 +116,6 @@ def get_technician_dashboard(db: Session, technician_id: int) -> TechnicianDashb
         for p, client_name, site_name in today_rows
     ]
 
-    notif_rows = notification_repository.list_query(technician_id).limit(5)
-    recent_notifications = [
-        NotificationSummary(
-            id=n.id, title=n.title, message=n.message, read=n.read, created_at=n.created_at.isoformat()
-        )
-        for n in db.scalars(notif_rows).all()
-    ]
-
     completed_rows = db.execute(
         select(Intervention, Client.client_name)
         .join(Client, Intervention.client_id == Client.id)
@@ -128,42 +130,18 @@ def get_technician_dashboard(db: Session, technician_id: int) -> TechnicianDashb
         for i, client_name in completed_rows
     ]
 
-    weekly_completed_chart = []
-    for offset in range(7):
-        day = week_start + timedelta(days=offset)
-        count = db.scalar(
-            select(func.count())
-            .select_from(Intervention)
-            .where(
-                Intervention.technician_id == technician_id,
-                Intervention.intervention_date == day,
-                Intervention.status == InterventionStatus.FULLY_APPROVED,
-            )
-        ) or 0
-        weekly_completed_chart.append(ChartPoint(label=day.strftime("%a"), value=count))
-
-    monthly_points_chart = []
-    for months_back in range(5, -1, -1):
-        target_month = _shift_month(month_start, -months_back)
-        next_month = _shift_month(target_month, 1)
-        points = db.scalar(
-            select(func.coalesce(func.sum(Intervention.points_earned), 0)).where(
-                Intervention.technician_id == technician_id,
-                Intervention.submission_date >= target_month,
-                Intervention.submission_date < next_month,
-            )
-        ) or 0
-        monthly_points_chart.append(ChartPoint(label=target_month.strftime("%b"), value=points))
+    weekly_completed_chart = weekly_completed_series(db, technician_id, week_start)
+    monthly_points_chart = monthly_points_series(db, technician_id, month_start)
 
     return TechnicianDashboard(
         planned_today=planned_today,
         completed_today=completed_today,
         pending_approval=pending_approval,
         rejected=rejected,
+        draft_count=draft_count,
         monthly_points=monthly_points,
         average_daily_duration_minutes=round(float(avg_duration or 0), 1),
         today_planning=today_planning,
-        recent_notifications=recent_notifications,
         recently_completed=recently_completed,
         weekly_completed_chart=weekly_completed_chart,
         monthly_points_chart=monthly_points_chart,
@@ -175,6 +153,273 @@ def _shift_month(d: date, delta: int) -> date:
     year = d.year + month_index // 12
     month = month_index % 12 + 1
     return date(year, month, 1)
+
+
+def _period_bounds(mode: PeriodMode, anchor: date) -> tuple[date, date]:
+    """Returns the [start, end) window for `mode` containing `anchor` — the
+    single day/week/month a user picks in the new period selector, not a
+    trailing multi-period window like the legacy *_series functions below."""
+    if mode == "daily":
+        return anchor, anchor + timedelta(days=1)
+    if mode == "weekly":
+        start = anchor - timedelta(days=anchor.weekday())  # Monday-start, matches _today()-derived week_start elsewhere.
+        return start, start + timedelta(days=7)
+    if mode == "monthly":
+        start = anchor.replace(day=1)
+        return start, _shift_month(start, 1)
+    raise ValueError(f"Unknown period mode: {mode!r}")
+
+
+def _daily_point_label(day: date, span_days: int) -> str:
+    # A single-day span (daily mode) needs no differentiator beyond the date
+    # itself; multi-day spans (weekly/monthly) label each point by weekday or
+    # short date so a 28-31 point monthly chart stays readable.
+    return day.strftime("%b %d") if span_days > 7 else day.strftime("%a")
+
+
+def _daily_breakdown(db: Session, mode: PeriodMode, anchor: date, count_for_day) -> list[ChartPoint]:
+    """Shared driver for trend-style charts: one ChartPoint per day within the
+    selected mode's window — 1 point (daily), 7 points (weekly), or the
+    selected month's day-count (monthly), each computed via `count_for_day`."""
+    start, end = _period_bounds(mode, anchor)
+    span_days = (end - start).days
+    points = []
+    day = start
+    while day < end:
+        points.append(ChartPoint(label=_daily_point_label(day, span_days), value=count_for_day(day)))
+        day += timedelta(days=1)
+    return points
+
+
+def technician_completed_series(db: Session, technician_id: int, mode: PeriodMode, anchor: date) -> list[ChartPoint]:
+    def count_for_day(day: date) -> int:
+        return db.scalar(
+            select(func.count())
+            .select_from(Intervention)
+            .where(
+                Intervention.technician_id == technician_id,
+                Intervention.intervention_date == day,
+                Intervention.status == InterventionStatus.FULLY_APPROVED,
+            )
+        ) or 0
+
+    return _daily_breakdown(db, mode, anchor, count_for_day)
+
+
+def technician_points_series(db: Session, technician_id: int, mode: PeriodMode, anchor: date) -> list[ChartPoint]:
+    def points_for_day(day: date) -> int:
+        next_day = day + timedelta(days=1)
+        return db.scalar(
+            select(func.coalesce(func.sum(Intervention.points_earned), 0)).where(
+                Intervention.technician_id == technician_id,
+                Intervention.submission_date >= day,
+                Intervention.submission_date < next_day,
+            )
+        ) or 0
+
+    return _daily_breakdown(db, mode, anchor, points_for_day)
+
+
+def activity_series(db: Session, mode: PeriodMode, anchor: date) -> list[ChartPoint]:
+    """Count of all interventions per day within the selected period — backs
+    the Chef dashboard's activity chart and the Admin dashboard's
+    interventions chart, which are the same underlying metric."""
+
+    def count_for_day(day: date) -> int:
+        return db.scalar(
+            select(func.count()).select_from(Intervention).where(Intervention.intervention_date == day)
+        ) or 0
+
+    return _daily_breakdown(db, mode, anchor, count_for_day)
+
+
+def interventions_by_technician_series(db: Session, mode: PeriodMode, anchor: date) -> list[ChartPoint]:
+    start, end = _period_bounds(mode, anchor)
+    rows = db.execute(
+        select(User.first_name, User.last_name, func.count(Intervention.id))
+        .join(Intervention, Intervention.technician_id == User.id)
+        .where(
+            Intervention.status == InterventionStatus.FULLY_APPROVED,
+            Intervention.intervention_date >= start,
+            Intervention.intervention_date < end,
+        )
+        .group_by(User.id)
+        .order_by(func.count(Intervention.id).desc())
+        .limit(10)
+    ).all()
+    return [ChartPoint(label=f"{first} {last[:1]}.", value=count) for first, last, count in rows]
+
+
+def client_activity_series(db: Session, mode: PeriodMode, anchor: date) -> list[ChartPoint]:
+    """Interventions grouped by client within the selected period — the same
+    query backs both the Chef dashboard's "by client" chart and the Admin
+    dashboard's "client activity" chart, which were duplicated all-time
+    queries before this round."""
+    start, end = _period_bounds(mode, anchor)
+    rows = db.execute(
+        select(Client.client_name, func.count(Intervention.id))
+        .join(Intervention, Intervention.client_id == Client.id)
+        .where(Intervention.intervention_date >= start, Intervention.intervention_date < end)
+        .group_by(Client.id)
+        .order_by(func.count(Intervention.id).desc())
+        .limit(10)
+    ).all()
+    return [ChartPoint(label=name, value=count) for name, count in rows]
+
+
+def city_activity_series(db: Session, mode: PeriodMode, anchor: date) -> list[ChartPoint]:
+    start, end = _period_bounds(mode, anchor)
+    rows = db.execute(
+        select(ClientSite.city, func.count(Intervention.id))
+        .join(Intervention, Intervention.site_id == ClientSite.id)
+        .where(Intervention.intervention_date >= start, Intervention.intervention_date < end)
+        .group_by(ClientSite.city)
+        .order_by(func.count(Intervention.id).desc())
+        .limit(10)
+    ).all()
+    return [ChartPoint(label=city, value=count) for city, count in rows]
+
+
+def points_distribution_series(db: Session, mode: PeriodMode, anchor: date) -> list[ChartPoint]:
+    start, end = _period_bounds(mode, anchor)
+    points_buckets = [(-1000, 0), (0, 1), (1, 3), (3, 6), (6, 1000)]
+    points_labels = ["Negative", "0", "1-2", "3-5", "6+"]
+    result = []
+    for (lo, hi), label in zip(points_buckets, points_labels):
+        count = db.scalar(
+            select(func.count())
+            .select_from(Intervention)
+            .where(
+                Intervention.points_earned >= lo,
+                Intervention.points_earned < hi,
+                Intervention.intervention_date >= start,
+                Intervention.intervention_date < end,
+            )
+        ) or 0
+        result.append(ChartPoint(label=label, value=count))
+    return result
+
+
+def technician_workload_series(db: Session, mode: PeriodMode, anchor: date) -> list[ChartPoint]:
+    start, end = _period_bounds(mode, anchor)
+    rows = db.execute(
+        select(User.first_name, User.last_name, func.count(Planning.id))
+        .join(Planning, Planning.technician_id == User.id)
+        .where(Planning.planned_date >= start, Planning.planned_date < end, Planning.status != "cancelled")
+        .group_by(User.id)
+        .order_by(func.count(Planning.id).desc())
+        .limit(10)
+    ).all()
+    return [ChartPoint(label=f"{first} {last[:1]}.", value=count) for first, last, count in rows]
+
+
+def get_technician_dashboard_charts(db: Session, technician_id: int, mode: PeriodMode, anchor: date) -> TechnicianDashboardCharts:
+    return TechnicianDashboardCharts(
+        completed_chart=technician_completed_series(db, technician_id, mode, anchor),
+        points_chart=technician_points_series(db, technician_id, mode, anchor),
+    )
+
+
+def get_chef_dashboard_charts(db: Session, mode: PeriodMode, anchor: date) -> ChefDashboardCharts:
+    return ChefDashboardCharts(
+        interventions_by_technician_chart=interventions_by_technician_series(db, mode, anchor),
+        interventions_by_client_chart=client_activity_series(db, mode, anchor),
+        activity_chart=activity_series(db, mode, anchor),
+        technician_workload=technician_workload_series(db, mode, anchor),
+    )
+
+
+def get_admin_dashboard_charts(db: Session, mode: PeriodMode, anchor: date) -> AdminDashboardCharts:
+    return AdminDashboardCharts(
+        interventions_chart=activity_series(db, mode, anchor),
+        points_distribution_chart=points_distribution_series(db, mode, anchor),
+        client_activity_chart=client_activity_series(db, mode, anchor),
+        city_activity_chart=city_activity_series(db, mode, anchor),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Legacy trailing-window chart series — power the 3 main dashboard endpoints'
+# default (no-period-selected) embedded charts. Left unchanged so first-load
+# rendering and existing tests stay stable; the mode-aware functions above
+# are additive and only invoked by the new /charts endpoints.
+# ---------------------------------------------------------------------------
+# loops so a specific week/month can be requested via a dedicated endpoint,
+# in addition to each main dashboard rendering its own default (current)
+# period through the same helper.
+# ---------------------------------------------------------------------------
+
+
+def weekly_completed_series(db: Session, technician_id: int, week_start: date) -> list[ChartPoint]:
+    points = []
+    for offset in range(7):
+        day = week_start + timedelta(days=offset)
+        count = db.scalar(
+            select(func.count())
+            .select_from(Intervention)
+            .where(
+                Intervention.technician_id == technician_id,
+                Intervention.intervention_date == day,
+                Intervention.status == InterventionStatus.FULLY_APPROVED,
+            )
+        ) or 0
+        points.append(ChartPoint(label=day.strftime("%a"), value=count))
+    return points
+
+
+def monthly_points_series(db: Session, technician_id: int, month_start: date) -> list[ChartPoint]:
+    points = []
+    for months_back in range(5, -1, -1):
+        target_month = _shift_month(month_start, -months_back)
+        next_month = _shift_month(target_month, 1)
+        total = db.scalar(
+            select(func.coalesce(func.sum(Intervention.points_earned), 0)).where(
+                Intervention.technician_id == technician_id,
+                Intervention.submission_date >= target_month,
+                Intervention.submission_date < next_month,
+            )
+        ) or 0
+        points.append(ChartPoint(label=target_month.strftime("%b"), value=total))
+    return points
+
+
+def daily_activity_series(db: Session, week_start: date) -> list[ChartPoint]:
+    points = []
+    for offset in range(7):
+        day = week_start + timedelta(days=offset)
+        count = db.scalar(
+            select(func.count()).select_from(Intervention).where(Intervention.intervention_date == day)
+        ) or 0
+        points.append(ChartPoint(label=day.strftime("%a"), value=count))
+    return points
+
+
+def weekly_activity_series(db: Session, week_start: date) -> list[ChartPoint]:
+    points = []
+    for weeks_back in range(3, -1, -1):
+        w_start = week_start - timedelta(weeks=weeks_back)
+        w_end = w_start + timedelta(days=7)
+        count = db.scalar(
+            select(func.count())
+            .select_from(Intervention)
+            .where(Intervention.intervention_date >= w_start, Intervention.intervention_date < w_end)
+        ) or 0
+        points.append(ChartPoint(label=w_start.strftime("%b %d"), value=count))
+    return points
+
+
+def monthly_interventions_series(db: Session, month_start: date) -> list[ChartPoint]:
+    points = []
+    for months_back in range(5, -1, -1):
+        target_month = _shift_month(month_start, -months_back)
+        target_next = _shift_month(target_month, 1)
+        count = db.scalar(
+            select(func.count())
+            .select_from(Intervention)
+            .where(Intervention.intervention_date >= target_month, Intervention.intervention_date < target_next)
+        ) or 0
+        points.append(ChartPoint(label=target_month.strftime("%b"), value=count))
+    return points
 
 
 # ---------------------------------------------------------------------------
@@ -237,24 +482,8 @@ def get_chef_dashboard(db: Session) -> ChefDashboard:
     ).all()
     interventions_by_client_chart = [ChartPoint(label=name, value=count) for name, count in by_client_rows]
 
-    daily_activity_chart = []
-    for offset in range(7):
-        day = week_start + timedelta(days=offset)
-        count = db.scalar(
-            select(func.count()).select_from(Intervention).where(Intervention.intervention_date == day)
-        ) or 0
-        daily_activity_chart.append(ChartPoint(label=day.strftime("%a"), value=count))
-
-    weekly_activity_chart = []
-    for weeks_back in range(3, -1, -1):
-        w_start = week_start - timedelta(weeks=weeks_back)
-        w_end = w_start + timedelta(days=7)
-        count = db.scalar(
-            select(func.count())
-            .select_from(Intervention)
-            .where(Intervention.intervention_date >= w_start, Intervention.intervention_date < w_end)
-        ) or 0
-        weekly_activity_chart.append(ChartPoint(label=w_start.strftime("%b %d"), value=count))
+    daily_activity_chart = daily_activity_series(db, week_start)
+    weekly_activity_chart = weekly_activity_series(db, week_start)
 
     today_rows = db.execute(
         select(Planning, Client.client_name, ClientSite.site_name)
@@ -292,7 +521,10 @@ def get_chef_dashboard(db: Session) -> ChefDashboard:
         .join(Client, Planning.client_id == Client.id)
         .join(ClientSite, Planning.site_id == ClientSite.id)
         .where(Planning.priority == Priority.URGENT, Planning.status != "cancelled")
-        .order_by(Planning.planned_date)
+        # Manually-reordered entries (via the Chef's drag-and-drop queue) sort
+        # first by their persisted position; never-reordered entries (null
+        # position) fall back to planned_date, matching the pre-reorder default.
+        .order_by(Planning.urgent_queue_position.is_(None), Planning.urgent_queue_position, Planning.planned_date)
         .limit(10)
     ).all()
     urgent_queue = [
@@ -381,16 +613,7 @@ def get_admin_dashboard(db: Session) -> AdminDashboard:
     # see README note when migrating.)
     avg_approval_minutes = round(float(avg_approval_seconds or 0) * 24 * 60, 1)
 
-    monthly_interventions_chart = []
-    for months_back in range(5, -1, -1):
-        target_month = _shift_month(month_start, -months_back)
-        target_next = _shift_month(target_month, 1)
-        count = db.scalar(
-            select(func.count())
-            .select_from(Intervention)
-            .where(Intervention.intervention_date >= target_month, Intervention.intervention_date < target_next)
-        ) or 0
-        monthly_interventions_chart.append(ChartPoint(label=target_month.strftime("%b"), value=count))
+    monthly_interventions_chart = monthly_interventions_series(db, month_start)
 
     points_buckets = [(-1000, 0), (0, 1), (1, 3), (3, 6), (6, 1000)]
     points_labels = ["Negative", "0", "1-2", "3-5", "6+"]

@@ -64,3 +64,4 @@ class Intervention(Base):
     attachments: Mapped[list["Attachment"]] = relationship(back_populates="intervention")
     approval_history: Mapped[list["ApprovalHistory"]] = relationship(back_populates="intervention")
     audit_log: Mapped[list["AuditLog"]] = relationship(back_populates="intervention")
+    colleague_technicians: Mapped[list["InterventionTechnician"]] = relationship(back_populates="intervention")

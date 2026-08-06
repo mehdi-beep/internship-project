@@ -15,7 +15,6 @@ import ContractsPage from "./pages/admin/ContractsPage";
 import ProjectsPage from "./pages/admin/ProjectsPage";
 import TravauxPage from "./pages/admin/TravauxPage";
 import PlanningPage from "./pages/PlanningPage";
-import CalendarPage from "./pages/CalendarPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import MyInterventionsPage from "./pages/MyInterventionsPage";
 import InterventionFormPage from "./pages/InterventionFormPage";
@@ -23,6 +22,8 @@ import InterventionDetailsPage from "./pages/InterventionDetailsPage";
 import TechnicalApprovalsPage from "./pages/TechnicalApprovalsPage";
 import AdministrativeApprovalsPage from "./pages/AdministrativeApprovalsPage";
 import ReportsPage from "./pages/ReportsPage";
+import TechnicianProfilePage from "./pages/TechnicianProfilePage";
+import ProfilePage from "./pages/ProfilePage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -124,16 +125,6 @@ export default function App() {
                 }
               />
               <Route
-                path="/calendar"
-                element={
-                  <ProtectedRoute allowedRoles={["technician", "chef_technicien"]}>
-                    <AppLayout>
-                      <CalendarPage />
-                    </AppLayout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
                 path="/notifications"
                 element={
                   <ProtectedRoute>
@@ -209,6 +200,26 @@ export default function App() {
                   <ProtectedRoute allowedRoles={["chef_technicien", "admin_supervisor"]}>
                     <AppLayout>
                       <ReportsPage />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/technicians/:id"
+                element={
+                  <ProtectedRoute allowedRoles={["chef_technicien", "admin_supervisor"]}>
+                    <AppLayout>
+                      <TechnicianProfilePage />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <ProfilePage />
                     </AppLayout>
                   </ProtectedRoute>
                 }

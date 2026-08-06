@@ -3,25 +3,38 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Box, Button, Stack, Typography } from "@mui/material";
 import dayjs from "dayjs";
 import DataTable, { type DataTableColumn } from "../components/DataTable";
-import ApprovalReviewDialog from "../components/ApprovalReviewDialog";
+import InterventionReviewViewer from "../components/InterventionReviewViewer";
+import GenericCalendar, { type GenericCalendarEvent } from "../components/GenericCalendar";
+import ViewModeToggle, { type ViewMode } from "../components/ViewModeToggle";
 import { listClients } from "../services/clientService";
 import {
   decideTechnicalApproval,
   listTechnicalPending,
   type ApprovalDecision,
 } from "../services/approvalService";
+import { interventionEventColor } from "../utils/interventionColors";
 import type { Intervention } from "../types/intervention";
 
 export default function TechnicalApprovalsPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [reviewingId, setReviewingId] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["approvals", "technical-pending", page, pageSize],
     queryFn: () => listTechnicalPending({ page, page_size: pageSize }),
+  });
+
+  // Calendar mode needs the full queue, not just one paginated page — a
+  // parallel fetch at the endpoint's current max page_size, list view and
+  // its pagination stay untouched.
+  const { data: calendarData } = useQuery({
+    queryKey: ["approvals", "technical-pending", "calendar"],
+    queryFn: () => listTechnicalPending({ page: 1, page_size: 100 }),
+    enabled: viewMode === "calendar",
   });
 
   const { data: clientsData } = useQuery({
@@ -66,12 +79,25 @@ export default function TechnicalApprovalsPage() {
     },
   ];
 
+  const items = data?.items ?? [];
+  const calendarItems = calendarData?.items ?? [];
+  const datedItems = calendarItems.filter((i) => i.submission_date);
+  const undatedCount = calendarItems.length - datedItems.length;
+  const calendarEvents: GenericCalendarEvent[] = datedItems.map((i) => ({
+    id: i.id,
+    date: i.submission_date!,
+    title: `${i.bi_number} — ${clientNameById.get(i.client_id) ?? "Client"}`,
+    color: interventionEventColor(i.status),
+    onClick: () => setReviewingId(i.id),
+  }));
+
   return (
     <Box>
       <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 2 }}>
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
           Technical Approvals
         </Typography>
+        <ViewModeToggle value={viewMode} onChange={setViewMode} />
       </Stack>
 
       {isError && (
@@ -80,23 +106,40 @@ export default function TechnicalApprovalsPage() {
         </Alert>
       )}
 
-      <DataTable
-        columns={columns}
-        rows={data?.items ?? []}
-        rowKey={(i) => i.id}
-        loading={isLoading}
-        emptyMessage="No interventions pending technical approval."
-        page={page}
-        pageSize={pageSize}
-        total={data?.total ?? 0}
-        onPageChange={setPage}
-        onPageSizeChange={(size) => {
-          setPageSize(size);
-          setPage(1);
-        }}
-      />
+      {viewMode === "list" ? (
+        <DataTable
+          columns={columns}
+          rows={items}
+          rowKey={(i) => i.id}
+          loading={isLoading}
+          emptyMessage="No interventions pending technical approval."
+          page={page}
+          pageSize={pageSize}
+          total={data?.total ?? 0}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+        />
+      ) : (
+        <>
+          {undatedCount > 0 && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+              {undatedCount} item(s) without a submission date are shown in List view only.
+            </Typography>
+          )}
+          {datedItems.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
+              No interventions pending technical approval.
+            </Typography>
+          ) : (
+            <GenericCalendar events={calendarEvents} />
+          )}
+        </>
+      )}
 
-      <ApprovalReviewDialog
+      <InterventionReviewViewer
         interventionId={reviewingId}
         level="technical"
         deciding={decideMutation.isPending}

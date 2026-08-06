@@ -1,10 +1,13 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import dayjs from "dayjs";
 import { Grid, Stack } from "@mui/material";
 import StatTile from "../../components/StatTile";
 import ChartCard from "../../components/ChartCard";
 import SimpleBarChart from "../../components/SimpleBarChart";
 import QueryStateGate from "../../components/QueryStateGate";
-import { getAdminDashboard } from "../../services/dashboardService";
+import PeriodModeSelector, { type PeriodMode } from "../../components/PeriodModeSelector";
+import { getAdminDashboard, getAdminDashboardCharts } from "../../services/dashboardService";
 import { CHART_STATUS } from "../../styles/chartColors";
 import type { AdminDashboard } from "../../types/dashboard";
 
@@ -22,6 +25,14 @@ export default function AdminDashboardContent() {
 }
 
 function AdminDashboardBody({ data }: { data: AdminDashboard }) {
+  const [mode, setMode] = useState<PeriodMode>("monthly");
+  const [anchor, setAnchor] = useState(() => dayjs().startOf("month").format("YYYY-MM-DD"));
+
+  const { data: charts } = useQuery({
+    queryKey: ["dashboard", "admin", "charts", mode, anchor],
+    queryFn: () => getAdminDashboardCharts(mode, anchor),
+  });
+
   return (
     <Stack spacing={3}>
       <Grid container spacing={2}>
@@ -48,25 +59,27 @@ function AdminDashboardBody({ data }: { data: AdminDashboard }) {
         </Grid>
       </Grid>
 
+      <PeriodModeSelector mode={mode} anchor={anchor} onModeChange={setMode} onAnchorChange={setAnchor} />
+
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
-          <ChartCard title="Monthly Interventions">
-            <SimpleBarChart data={data.monthly_interventions_chart} colorIndex={0} />
+          <ChartCard title="Interventions">
+            <SimpleBarChart data={charts?.interventions_chart ?? []} colorIndex={0} />
           </ChartCard>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
           <ChartCard title="Points Distribution">
-            <SimpleBarChart data={data.points_distribution_chart} colorIndex={3} />
+            <SimpleBarChart data={charts?.points_distribution_chart ?? []} colorIndex={3} />
           </ChartCard>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
           <ChartCard title="Client Activity">
-            <SimpleBarChart data={data.client_activity_chart} colorIndex={2} />
+            <SimpleBarChart data={charts?.client_activity_chart ?? []} colorIndex={2} />
           </ChartCard>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
           <ChartCard title="City Activity">
-            <SimpleBarChart data={data.city_activity_chart} colorIndex={6} />
+            <SimpleBarChart data={charts?.city_activity_chart ?? []} colorIndex={6} />
           </ChartCard>
         </Grid>
       </Grid>

@@ -14,14 +14,6 @@ export interface PlanningSummary {
   status: string;
 }
 
-export interface NotificationSummary {
-  id: number;
-  title: string;
-  message: string;
-  read: boolean;
-  created_at: string;
-}
-
 export interface InterventionSummary {
   id: number;
   bi_number: string;
@@ -35,10 +27,10 @@ export interface TechnicianDashboard {
   completed_today: number;
   pending_approval: number;
   rejected: number;
+  draft_count: number;
   monthly_points: number;
   average_daily_duration_minutes: number;
   today_planning: PlanningSummary[];
-  recent_notifications: NotificationSummary[];
   recently_completed: InterventionSummary[];
   weekly_completed_chart: ChartPoint[];
   monthly_points_chart: ChartPoint[];
@@ -68,6 +60,25 @@ export interface AdminDashboard {
   monthly_interventions_chart: ChartPoint[];
   approval_rate: number;
   rejection_rate: number;
+  points_distribution_chart: ChartPoint[];
+  client_activity_chart: ChartPoint[];
+  city_activity_chart: ChartPoint[];
+}
+
+export interface TechnicianDashboardCharts {
+  completed_chart: ChartPoint[];
+  points_chart: ChartPoint[];
+}
+
+export interface ChefDashboardCharts {
+  interventions_by_technician_chart: ChartPoint[];
+  interventions_by_client_chart: ChartPoint[];
+  activity_chart: ChartPoint[];
+  technician_workload: ChartPoint[];
+}
+
+export interface AdminDashboardCharts {
+  interventions_chart: ChartPoint[];
   points_distribution_chart: ChartPoint[];
   client_activity_chart: ChartPoint[];
   city_activity_chart: ChartPoint[];

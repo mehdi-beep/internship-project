@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Box, Button, MenuItem, Stack, Tab, Tabs, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, FormControlLabel, MenuItem, Stack, Switch, Tab, Tabs, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import dayjs from "dayjs";
 import DataTable, { type DataTableColumn } from "../components/DataTable";
 import SearchBar from "../components/SearchBar";
 import StatusBadge from "../components/StatusBadge";
+import GenericCalendar, { type GenericCalendarEvent } from "../components/GenericCalendar";
+import ViewModeToggle, { type ViewMode } from "../components/ViewModeToggle";
 import { listClients } from "../services/clientService";
 import { listInterventions } from "../services/interventionService";
 import { useAuth } from "../context/AuthContext";
+import { interventionEventColor } from "../utils/interventionColors";
 import type { InterventionStatus } from "../types/enums";
 import type { Intervention } from "../types/intervention";
 
@@ -30,12 +33,14 @@ export default function MyInterventionsPage() {
   const isTechnician = user?.role === "technician";
 
   const [tabIndex, setTabIndex] = useState(0);
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [search, setSearch] = useState("");
   const [clientFilter, setClientFilter] = useState<number | "">("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [assistedOnly, setAssistedOnly] = useState(false);
 
   const activeTab = TABS[tabIndex];
   // The API filters one status at a time; multi-status tabs are filtered client-side
@@ -43,7 +48,7 @@ export default function MyInterventionsPage() {
   const serverStatus = activeTab.statuses.length === 1 ? activeTab.statuses[0] : undefined;
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["interventions", page, pageSize, search, clientFilter, dateFrom, dateTo, serverStatus],
+    queryKey: ["interventions", page, pageSize, search, clientFilter, dateFrom, dateTo, serverStatus, assistedOnly, user?.id],
     queryFn: () =>
       listInterventions({
         page,
@@ -53,7 +58,36 @@ export default function MyInterventionsPage() {
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
         status: serverStatus,
+        colleague_technician_id: assistedOnly && isTechnician ? user?.id : undefined,
       }),
+  });
+
+  // Calendar mode needs a much wider window than the paginated List view can
+  // provide (20 rows would only ever show a handful of scattered events) — a
+  // separate, parallel fetch at the interventions endpoint's max page_size,
+  // leaving the List query above (and its pagination) completely untouched.
+  // The fetched range tracks whatever month(s) FullCalendar is currently
+  // showing (via onVisibleRangeChange), so navigating prev/next/today
+  // actually loads that period's data instead of silently staying empty
+  // outside the initial default window.
+  const [calendarRange, setCalendarRange] = useState(() => ({
+    date_from: dayjs().startOf("month").subtract(1, "month").format("YYYY-MM-DD"),
+    date_to: dayjs().endOf("month").add(1, "month").format("YYYY-MM-DD"),
+  }));
+  const { data: calendarData } = useQuery({
+    queryKey: ["interventions", "calendar", calendarRange, search, clientFilter, serverStatus, assistedOnly, user?.id],
+    queryFn: () =>
+      listInterventions({
+        page: 1,
+        page_size: 100,
+        search: search || undefined,
+        client_id: clientFilter || undefined,
+        date_from: dateFrom || calendarRange.date_from,
+        date_to: dateTo || calendarRange.date_to,
+        status: serverStatus,
+        colleague_technician_id: assistedOnly && isTechnician ? user?.id : undefined,
+      }),
+    enabled: viewMode === "calendar",
   });
 
   const { data: clientsData } = useQuery({
@@ -65,6 +99,17 @@ export default function MyInterventionsPage() {
   const rows = (data?.items ?? []).filter((i) =>
     activeTab.statuses.length <= 1 ? true : activeTab.statuses.includes(i.status),
   );
+
+  const calendarRows = (calendarData?.items ?? []).filter((i) =>
+    activeTab.statuses.length <= 1 ? true : activeTab.statuses.includes(i.status),
+  );
+  const calendarEvents: GenericCalendarEvent[] = calendarRows.map((i) => ({
+    id: i.id,
+    date: i.intervention_date,
+    title: `${i.bi_number} — ${clientNameById.get(i.client_id) ?? "Client"}`,
+    color: interventionEventColor(i.status),
+    onClick: () => navigate(`/interventions/${i.id}`),
+  }));
 
   const columns: DataTableColumn<Intervention>[] = [
     { key: "bi", label: "BI Number", render: (i) => i.bi_number },
@@ -90,11 +135,14 @@ export default function MyInterventionsPage() {
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
           {isTechnician ? "My Interventions" : "Interventions"}
         </Typography>
-        {isTechnician && (
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate("/interventions/new")}>
-            New Intervention
-          </Button>
-        )}
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          {isTechnician && (
+            <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate("/interventions/new")}>
+              New Intervention
+            </Button>
+          )}
+        </Stack>
       </Stack>
 
       <Tabs
@@ -161,6 +209,20 @@ export default function MyInterventionsPage() {
             setPage(1);
           }}
         />
+        {isTechnician && (
+          <FormControlLabel
+            control={
+              <Switch
+                checked={assistedOnly}
+                onChange={(e) => {
+                  setAssistedOnly(e.target.checked);
+                  setPage(1);
+                }}
+              />
+            }
+            label="Include interventions I assisted on"
+          />
+        )}
       </Stack>
 
       {isError && (
@@ -169,21 +231,32 @@ export default function MyInterventionsPage() {
         </Alert>
       )}
 
-      <DataTable
-        columns={columns}
-        rows={rows}
-        rowKey={(i) => i.id}
-        loading={isLoading}
-        emptyMessage="No interventions found."
-        page={page}
-        pageSize={pageSize}
-        total={data?.total ?? 0}
-        onPageChange={setPage}
-        onPageSizeChange={(size) => {
-          setPageSize(size);
-          setPage(1);
-        }}
-      />
+      {viewMode === "list" ? (
+        <DataTable
+          columns={columns}
+          rows={rows}
+          rowKey={(i) => i.id}
+          loading={isLoading}
+          emptyMessage="No interventions found."
+          page={page}
+          pageSize={pageSize}
+          total={data?.total ?? 0}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+        />
+      ) : calendarRows.length === 0 ? (
+        <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
+          No interventions found.
+        </Typography>
+      ) : (
+        <GenericCalendar
+          events={calendarEvents}
+          onVisibleRangeChange={(range) => setCalendarRange({ date_from: range.start, date_to: range.end })}
+        />
+      )}
     </Box>
   );
 }

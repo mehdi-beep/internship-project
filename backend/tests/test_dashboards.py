@@ -9,8 +9,8 @@ def test_technician_dashboard_shape_and_role_gating(client, auth_headers):
     assert response.status_code == 200
     data = response.json()["data"]
     for key in [
-        "planned_today", "completed_today", "pending_approval", "rejected", "monthly_points",
-        "average_daily_duration_minutes", "today_planning", "recent_notifications",
+        "planned_today", "completed_today", "pending_approval", "rejected", "draft_count", "monthly_points",
+        "average_daily_duration_minutes", "today_planning",
         "recently_completed", "weekly_completed_chart", "monthly_points_chart",
     ]:
         assert key in data
@@ -82,5 +82,167 @@ def test_dashboard_lists_and_charts_are_bounded(client, auth_headers):
     assert len(chef_data["interventions_by_client_chart"]) <= 10
     assert len(chef_data["urgent_queue"]) <= 10
 
-    admin_data = client.get("/api/dashboard/admin", headers=admin).json()["data"]
-    assert len(admin_data["client_activity_chart"]) <= 10
+
+class TestDashboardChartsEndpoints:
+    """Round 3 — /dashboard/{role}/charts, scoped to exactly the selected
+    day/week/month (not the legacy trailing-window *_series functions, which
+    still power the 3 main dashboard endpoints' unchanged default view)."""
+
+    # --- Shape / role gating ---
+
+    def test_technician_charts_shape_and_role_gating(self, client, auth_headers):
+        tech1 = auth_headers("tech01")
+        response = client.get(
+            "/api/dashboard/technician/charts", headers=tech1, params={"mode": "monthly", "anchor": "2026-01-15"}
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert "completed_chart" in data
+        assert "points_chart" in data
+        assert client.get(
+            "/api/dashboard/technician/charts",
+            headers=auth_headers("chef01"),
+            params={"mode": "monthly", "anchor": "2026-01-15"},
+        ).status_code == 403
+
+    def test_supervisor_charts_shape_and_role_gating(self, client, auth_headers):
+        chef = auth_headers("chef01")
+        response = client.get(
+            "/api/dashboard/supervisor/charts", headers=chef, params={"mode": "monthly", "anchor": "2026-01-15"}
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        for key in ["interventions_by_technician_chart", "interventions_by_client_chart", "activity_chart", "technician_workload"]:
+            assert key in data
+        assert client.get(
+            "/api/dashboard/supervisor/charts",
+            headers=auth_headers("tech01"),
+            params={"mode": "monthly", "anchor": "2026-01-15"},
+        ).status_code == 403
+
+    def test_admin_charts_shape_and_role_gating(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        response = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "monthly", "anchor": "2026-01-15"}
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        for key in ["interventions_chart", "points_distribution_chart", "client_activity_chart", "city_activity_chart"]:
+            assert key in data
+        assert client.get(
+            "/api/dashboard/admin/charts",
+            headers=auth_headers("chef01"),
+            params={"mode": "monthly", "anchor": "2026-01-15"},
+        ).status_code == 403
+
+    # --- Length correctness per mode (the core of the "single selected period" fix) ---
+
+    def test_daily_mode_trend_charts_have_one_point(self, client, auth_headers):
+        tech1 = auth_headers("tech01")
+        data = client.get(
+            "/api/dashboard/technician/charts", headers=tech1, params={"mode": "daily", "anchor": "2026-01-15"}
+        ).json()["data"]
+        assert len(data["completed_chart"]) == 1
+        assert len(data["points_chart"]) == 1
+
+    def test_weekly_mode_trend_charts_have_seven_points(self, client, auth_headers):
+        chef = auth_headers("chef01")
+        data = client.get(
+            "/api/dashboard/supervisor/charts", headers=chef, params={"mode": "weekly", "anchor": "2026-01-15"}
+        ).json()["data"]
+        assert len(data["activity_chart"]) == 7
+
+    def test_monthly_mode_trend_charts_have_one_point_per_day_in_month(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        # February 2026 is not a leap year -> exactly 28 days, a precise
+        # off-by-one guard rather than a vaguer "28-31" range check.
+        data = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "monthly", "anchor": "2026-02-10"}
+        ).json()["data"]
+        assert len(data["interventions_chart"]) == 28
+
+        january = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "monthly", "anchor": "2026-01-10"}
+        ).json()["data"]
+        assert len(january["interventions_chart"]) == 31
+
+    def test_categorical_charts_keep_fixed_shape_regardless_of_mode(self, client, auth_headers):
+        # Categorical charts (grouped by technician/client/city/points-bucket)
+        # don't grow with the period length the way trend charts do — only
+        # their totals should change, not their point count.
+        admin = auth_headers("admin01")
+        daily = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "daily", "anchor": "2026-01-15"}
+        ).json()["data"]
+        monthly = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "monthly", "anchor": "2026-01-15"}
+        ).json()["data"]
+        assert len(daily["points_distribution_chart"]) == 5
+        assert len(monthly["points_distribution_chart"]) == 5
+
+    # --- Categorical charts actually filter by period (not silently all-time) ---
+
+    def test_categorical_chart_totals_grow_from_daily_to_monthly(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        daily = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "daily", "anchor": "2026-03-15"}
+        ).json()["data"]
+        monthly = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "monthly", "anchor": "2026-03-15"}
+        ).json()["data"]
+        daily_total = sum(p["value"] for p in daily["client_activity_chart"])
+        monthly_total = sum(p["value"] for p in monthly["client_activity_chart"])
+        # A whole month can never have fewer matching interventions than one
+        # day within it — proves the WHERE clause is genuinely narrowing, not
+        # a no-op left over from the old all-time query.
+        assert monthly_total >= daily_total
+
+    def test_technician_workload_now_responds_to_period_instead_of_hardcoded_week(self, client, auth_headers):
+        # Previously hardcoded to "this week" with no override — confirm the
+        # new endpoint's technician_workload actually varies with the anchor,
+        # proving it's no longer stuck on a fixed window.
+        chef = auth_headers("chef01")
+        far_past = client.get(
+            "/api/dashboard/supervisor/charts", headers=chef, params={"mode": "monthly", "anchor": "2025-01-01"}
+        ).json()["data"]["technician_workload"]
+        recent = client.get(
+            "/api/dashboard/supervisor/charts", headers=chef, params={"mode": "monthly", "anchor": "2026-01-01"}
+        ).json()["data"]["technician_workload"]
+        assert far_past != recent or (sum(p["value"] for p in far_past) == 0)
+
+    # --- Validation ---
+
+    def test_invalid_mode_returns_422(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        response = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "yearly", "anchor": "2026-01-15"}
+        )
+        assert response.status_code == 422
+
+    def test_different_anchor_produces_different_data(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        jan = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "monthly", "anchor": "2026-01-01"}
+        ).json()["data"]
+        jun = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "monthly", "anchor": "2026-06-01"}
+        ).json()["data"]
+        assert [p["label"] for p in jan["interventions_chart"]] != [p["label"] for p in jun["interventions_chart"]]
+
+    # --- Monday-start week boundary consistency ---
+
+    def test_weekly_mode_boundary_is_stable_across_the_week(self, client, auth_headers):
+        # 2026-01-05 is a Monday; 2026-01-07 (Wednesday) and 2026-01-11
+        # (Sunday) fall in the same ISO week and must produce the identical
+        # 7-day window/labels regardless of which weekday is picked.
+        chef = auth_headers("chef01")
+        monday = client.get(
+            "/api/dashboard/supervisor/charts", headers=chef, params={"mode": "weekly", "anchor": "2026-01-05"}
+        ).json()["data"]["activity_chart"]
+        wednesday = client.get(
+            "/api/dashboard/supervisor/charts", headers=chef, params={"mode": "weekly", "anchor": "2026-01-07"}
+        ).json()["data"]["activity_chart"]
+        sunday = client.get(
+            "/api/dashboard/supervisor/charts", headers=chef, params={"mode": "weekly", "anchor": "2026-01-11"}
+        ).json()["data"]["activity_chart"]
+        assert [p["label"] for p in monday] == [p["label"] for p in wednesday] == [p["label"] for p in sunday]

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -15,11 +16,13 @@ import {
 import EditIcon from "@mui/icons-material/EditOutlined";
 import dayjs from "dayjs";
 import AttachmentUploader from "../components/AttachmentUploader";
+import InterventionReviewViewer from "../components/InterventionReviewViewer";
 import StatusBadge from "../components/StatusBadge";
 import { getIntervention } from "../services/interventionService";
 import { listClients } from "../services/clientService";
 import { listSites } from "../services/siteService";
 import { listTravaux } from "../services/travailService";
+import { listTechnicianOptions } from "../services/userService";
 import { useAuth } from "../context/AuthContext";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -53,6 +56,7 @@ export default function InterventionDetailsPage() {
   const interventionId = Number(id);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [reviewingAttachmentIndex, setReviewingAttachmentIndex] = useState<number | null>(null);
 
   const { data: intervention, isLoading, isError, error } = useQuery({
     queryKey: ["intervention", interventionId],
@@ -71,6 +75,10 @@ export default function InterventionDetailsPage() {
   const { data: travauxData } = useQuery({
     queryKey: ["travaux", "catalog-all"],
     queryFn: () => listTravaux({ page_size: 100, active_only: true }),
+  });
+  const { data: technicianOptions } = useQuery({
+    queryKey: ["users", "technician-options"],
+    queryFn: listTechnicianOptions,
   });
 
   if (isLoading) {
@@ -100,6 +108,9 @@ export default function InterventionDetailsPage() {
   const clientName = clientsData?.items.find((c) => c.id === intervention.client_id)?.client_name;
   const site = sitesData?.items.find((s) => s.id === intervention.site_id);
   const travailById = new Map((travauxData?.items ?? []).map((t) => [t.id, t]));
+  const technicianNameById = new Map(
+    (technicianOptions ?? []).map((t) => [t.id, `${t.first_name} ${t.last_name}`]),
+  );
 
   // Ch.15/17 — only the owning technician may edit, and only while Draft or Rejected.
   const isOwner = user?.id === intervention.technician_id;
@@ -168,6 +179,23 @@ export default function InterventionDetailsPage() {
           </Stack>
         </Section>
 
+        <Section title="Colleague Technicians">
+          {intervention.colleague_technicians.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              No colleague technicians added.
+            </Typography>
+          ) : (
+            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+              {intervention.colleague_technicians.map((colleague) => (
+                <Chip
+                  key={colleague.id}
+                  label={technicianNameById.get(colleague.user_id) ?? `#${colleague.user_id}`}
+                />
+              ))}
+            </Stack>
+          )}
+        </Section>
+
         <Section title="Time & Duration">
           <Stack direction="row" spacing={4} sx={{ flexWrap: "wrap", gap: 2 }}>
             <Field label="Start Time" value={intervention.start_time.slice(0, 5)} />
@@ -210,6 +238,7 @@ export default function InterventionDetailsPage() {
             readOnly
             onUpload={async () => {}}
             onDelete={async () => {}}
+            onImageClick={(index) => setReviewingAttachmentIndex(index)}
           />
         </Section>
 
@@ -263,6 +292,13 @@ export default function InterventionDetailsPage() {
           </Stack>
         </Section>
       </Stack>
+
+      <InterventionReviewViewer
+        interventionId={reviewingAttachmentIndex !== null ? intervention.id : null}
+        readOnly
+        initialAttachmentIndex={reviewingAttachmentIndex ?? 0}
+        onClose={() => setReviewingAttachmentIndex(null)}
+      />
     </Box>
   );
 }

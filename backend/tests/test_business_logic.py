@@ -7,7 +7,6 @@ import pytest
 from fastapi import HTTPException
 
 from app.models.enums import InterventionStatus
-from config import get_settings
 
 CASABLANCA = ZoneInfo("Africa/Casablanca")
 UTC = ZoneInfo("UTC")
@@ -58,23 +57,14 @@ class TestPointSystem:
         assert calculate_points(at_casablanca_hour(22, 0)) == 1
         assert calculate_points(at_casablanca_hour(23, 59)) == 1
 
-    def test_penalty_window_after_midnight(self):
+    def test_flat_penalty_outside_the_three_positive_windows(self):
         from app.services.business_logic_service import calculate_points
 
-        settings = get_settings()
-        assert calculate_points(at_casablanca_hour(0, 0)) == settings.late_submission_penalty_points
-        assert calculate_points(at_casablanca_hour(5, 59)) == settings.late_submission_penalty_points
-
-    def test_zero_points_during_normal_hours(self):
-        from app.services.business_logic_service import calculate_points
-
-        assert calculate_points(at_casablanca_hour(6, 0)) == 0
-        assert calculate_points(at_casablanca_hour(12, 0)) == 0
-        assert calculate_points(at_casablanca_hour(16, 59)) == 0
-
-    def test_penalty_is_configurable_and_negative(self):
-        settings = get_settings()
-        assert settings.late_submission_penalty_points < 0
+        assert calculate_points(at_casablanca_hour(0, 0)) == -1
+        assert calculate_points(at_casablanca_hour(5, 59)) == -1
+        assert calculate_points(at_casablanca_hour(6, 0)) == -1
+        assert calculate_points(at_casablanca_hour(12, 0)) == -1
+        assert calculate_points(at_casablanca_hour(16, 59)) == -1
 
 
 class TestStatusTransitionStateMachine:

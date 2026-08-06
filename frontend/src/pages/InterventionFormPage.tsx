@@ -19,8 +19,10 @@ import dayjs from "dayjs";
 import ClientSelect from "../components/ClientSelect";
 import SiteSelect from "../components/SiteSelect";
 import TravauxMultiSelect from "../components/TravauxMultiSelect";
+import ColleagueTechnicianSelect from "../components/ColleagueTechnicianSelect";
 import AttachmentUploader from "../components/AttachmentUploader";
 import ConfirmationDialog from "../components/ConfirmationDialog";
+import { useAuth } from "../context/AuthContext";
 import { listContracts } from "../services/contractService";
 import { listProjects } from "../services/projectService";
 import {
@@ -50,6 +52,7 @@ interface FormValues {
   lunch_break_minutes: number | "";
   number_of_technicians: number;
   travail_ids: number[];
+  colleague_technician_ids: number[];
   technical_report: string;
 }
 
@@ -84,6 +87,7 @@ export default function InterventionFormPage() {
   const isEdit = interventionId !== null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
@@ -112,6 +116,7 @@ export default function InterventionFormPage() {
       lunch_break_minutes: 60,
       number_of_technicians: 1,
       travail_ids: [],
+      colleague_technician_ids: [],
       technical_report: "",
     },
   });
@@ -141,6 +146,7 @@ export default function InterventionFormPage() {
       lunch_break_minutes: existing.lunch_break_minutes,
       number_of_technicians: existing.number_of_technicians,
       travail_ids: existing.tasks.map((t) => t.travail_id),
+      colleague_technician_ids: existing.colleague_technicians.map((c) => c.user_id),
       technical_report: existing.technical_report ?? "",
     });
   }, [existing, reset]);
@@ -182,6 +188,7 @@ export default function InterventionFormPage() {
     lunch_break_minutes: values.no_lunch_break ? 0 : Number(values.lunch_break_minutes) || 0,
     number_of_technicians: Number(values.number_of_technicians) || 1,
     travail_ids: values.travail_ids,
+    colleague_technician_ids: values.colleague_technician_ids,
     technical_report: values.technical_report || null,
   });
 
@@ -272,22 +279,28 @@ export default function InterventionFormPage() {
             <Stack spacing={2}>
               <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", gap: 2 }}>
                 <TextField
+                  label="Technician"
+                  value={user ? `${user.first_name} ${user.last_name}` : ""}
+                  slotProps={{ input: { readOnly: true } }}
+                  sx={{ flex: 1, minWidth: 200 }}
+                />
+                <TextField
                   label="BI Number"
                   value={existing?.bi_number ?? "Generated on save"}
                   slotProps={{ input: { readOnly: true } }}
                   sx={{ flex: 1, minWidth: 200 }}
-                  helperText="Automatic, read-only (Rule 6)"
-                />
-                <TextField
-                  label="Intervention Date"
-                  type="date"
-                  disabled={readOnly}
-                  slotProps={{ inputLabel: { shrink: true } }}
-                  sx={{ flex: 1, minWidth: 200 }}
-                  error={!!errors.intervention_date}
-                  {...register("intervention_date", { required: true })}
+                  helperText="Automatic, read-only"
                 />
               </Stack>
+              <TextField
+                label="Intervention Date"
+                type="date"
+                disabled={readOnly}
+                slotProps={{ inputLabel: { shrink: true } }}
+                sx={{ maxWidth: 300 }}
+                error={!!errors.intervention_date}
+                {...register("intervention_date", { required: true })}
+              />
               {existing?.submission_date && (
                 <Typography variant="caption" color="text.secondary">
                   Submitted {dayjs(existing.submission_date).format("MMM D, YYYY HH:mm")}
@@ -327,7 +340,7 @@ export default function InterventionFormPage() {
                     clientId={clientId || null}
                     disabled={readOnly}
                     error={!!errors.site_id}
-                    helperText={errors.site_id ? "Site is required (Rule 4)" : "Filtered by the selected client"}
+                    helperText={errors.site_id ? "Site is required" : "Filtered by the selected client"}
                   />
                 )}
               />
@@ -518,20 +531,35 @@ export default function InterventionFormPage() {
                 </Box>
               </Stack>
               <Typography variant="caption" color="text.secondary">
-                Net duration is calculated by the backend and cannot be edited (Ch.27).
+                Net duration is calculated automatically and cannot be edited.
               </Typography>
             </Stack>
           </SectionCard>
 
           <SectionCard title="F — Number of Technicians">
-            <TextField
-              label="Number of Technicians"
-              type="number"
-              disabled={readOnly}
-              sx={{ maxWidth: 240 }}
-              slotProps={{ htmlInput: { min: 1 } }}
-              {...register("number_of_technicians", { valueAsNumber: true, min: 1 })}
-            />
+            <Stack spacing={2}>
+              <TextField
+                label="Number of Technicians"
+                type="number"
+                disabled={readOnly}
+                sx={{ maxWidth: 240 }}
+                slotProps={{ htmlInput: { min: 1 } }}
+                {...register("number_of_technicians", { valueAsNumber: true, min: 1 })}
+              />
+              <Controller
+                name="colleague_technician_ids"
+                control={control}
+                render={({ field }) => (
+                  <ColleagueTechnicianSelect
+                    value={field.value}
+                    onChange={field.onChange}
+                    excludeUserId={user?.id}
+                    disabled={readOnly}
+                    helperText="Optional — add other technicians who assisted with this intervention."
+                  />
+                )}
+              />
+            </Stack>
           </SectionCard>
 
           <SectionCard title="G — Travaux Effectués">
@@ -543,7 +571,7 @@ export default function InterventionFormPage() {
                   value={field.value}
                   onChange={field.onChange}
                   disabled={readOnly}
-                  helperText="Selected from the catalog only — free typing is not allowed (Ch.41)."
+                  helperText="Selected from the catalog only — free typing is not allowed."
                 />
               )}
             />

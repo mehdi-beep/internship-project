@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import {
   Alert,
   Box,
@@ -17,10 +18,14 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "../services/notificationService";
+import { resolveNotificationPath } from "../utils/notificationRouting";
+import { useAuth } from "../context/AuthContext";
 import type { Notification } from "../types/notification";
 
 export default function NotificationsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [page, setPage] = useState(1);
 
   const { data, isLoading, isError } = useQuery({
@@ -41,6 +46,17 @@ export default function NotificationsPage() {
   });
 
   const hasUnread = (data?.items ?? []).some((n) => !n.read);
+
+  const handleNotificationClick = (notification: Notification) => {
+    if (!notification.read) {
+      markReadMutation.mutate(notification);
+    }
+    if (!user) return;
+    const path = resolveNotificationPath(notification, user.role);
+    if (path) {
+      navigate(path);
+    }
+  };
 
   return (
     <Box>
@@ -76,7 +92,7 @@ export default function NotificationsPage() {
           {(data?.items ?? []).map((notification) => (
             <ListItemButton
               key={notification.id}
-              onClick={() => !notification.read && markReadMutation.mutate(notification)}
+              onClick={() => handleNotificationClick(notification)}
               sx={{
                 bgcolor: notification.read ? "transparent" : "action.hover",
                 borderBottom: "1px solid",

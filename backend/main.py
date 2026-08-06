@@ -19,6 +19,7 @@ from app.api import (
     projects,
     reports,
     sites,
+    technician_performance,
     travaux,
     users,
 )
@@ -62,4 +63,5 @@ app.include_router(interventions.router, prefix="/api")
 app.include_router(attachments.router, prefix="/api")
 app.include_router(approvals.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
+app.include_router(technician_performance.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")

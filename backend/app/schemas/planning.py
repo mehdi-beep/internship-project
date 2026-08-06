@@ -39,6 +39,7 @@ class PlanningOut(BaseModel):
     priority: Priority
     status: PlanningStatus
     notes: str | None
+    urgent_queue_position: int | None
     created_by: int
     created_at: datetime
     updated_at: datetime

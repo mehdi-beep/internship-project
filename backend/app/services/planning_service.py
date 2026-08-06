@@ -22,8 +22,9 @@ def list_planning(
     date_to: date | None,
     priority: Priority | None,
     status_filter: PlanningStatus | None,
+    created_by: int | None = None,
 ) -> Page:
-    stmt = planning_repository.list_query(technician_id, date_from, date_to, priority, status_filter)
+    stmt = planning_repository.list_query(technician_id, date_from, date_to, priority, status_filter, created_by)
     return paginate(db, stmt, page, page_size)
 
 
@@ -69,9 +70,9 @@ def create_planning(db: Session, payload: PlanningCreate, created_by: int) -> Pl
         },
     )
     if planning.priority == Priority.URGENT:
-        notification_service.notify_urgent_assignment(db, planning.technician_id, _bi_reference(planning))
+        notification_service.notify_urgent_assignment(db, planning.technician_id, _bi_reference(planning), planning.id)
     else:
-        notification_service.notify_new_assignment(db, planning.technician_id, _bi_reference(planning))
+        notification_service.notify_new_assignment(db, planning.technician_id, _bi_reference(planning), planning.id)
     return planning
 
 
@@ -93,7 +94,7 @@ def update_planning(db: Session, planning_id: int, payload: PlanningUpdate) -> P
             "notes": payload.notes,
         },
     )
-    notification_service.notify_planning_modified(db, planning.technician_id, _bi_reference(planning))
+    notification_service.notify_planning_modified(db, planning.technician_id, _bi_reference(planning), planning.id)
     return planning
 
 
@@ -102,12 +103,26 @@ def cancel_planning(db: Session, planning_id: int) -> Planning:
     if planning.status == PlanningStatus.CANCELLED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Planning is already cancelled.")
     planning = planning_repository.set_status(db, planning, PlanningStatus.CANCELLED)
-    notification_service.notify_planning_cancelled(db, planning.technician_id, _bi_reference(planning))
+    notification_service.notify_planning_cancelled(db, planning.technician_id, _bi_reference(planning), planning.id)
     return planning
 
 
 def mark_urgent(db: Session, planning_id: int) -> Planning:
     planning = get_planning(db, planning_id)
     planning = planning_repository.update(db, planning, {"priority": Priority.URGENT})
-    notification_service.notify_urgent_assignment(db, planning.technician_id, _bi_reference(planning))
+    notification_service.notify_urgent_assignment(db, planning.technician_id, _bi_reference(planning), planning.id)
     return planning
+
+
+def reorder_urgent_queue(db: Session, ordered_ids: list[int]) -> None:
+    # All-or-nothing: validate every id is an active urgent entry before
+    # persisting any reorder, matching the validate-then-mutate style used
+    # elsewhere in this module.
+    for planning_id in ordered_ids:
+        planning = get_planning(db, planning_id)
+        if planning.priority != Priority.URGENT or planning.status == PlanningStatus.CANCELLED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Planning {planning_id} is not an active urgent entry.",
+            )
+    planning_repository.reorder_urgent_queue(db, ordered_ids)

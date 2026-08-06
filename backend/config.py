@@ -18,10 +18,6 @@ class Settings(BaseSettings):
     upload_folder: str = "app/uploads"
     max_upload_size: int = 10 * 1024 * 1024
 
-    # Ch.28 — negative-points penalty for submissions after midnight. Exact
-    # value is explicitly called out as configurable by the spec.
-    late_submission_penalty_points: int = -2
-
     cors_origins: str = "http://localhost:5173"
 
     @property

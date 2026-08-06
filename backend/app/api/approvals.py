@@ -4,13 +4,21 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.middleware.auth import require_roles
 from app.models.user import User
-from app.schemas.approval import ApprovalDecisionInput
+from app.schemas.approval import ApprovalDecisionInput, RecentApprovalDecision
 from app.schemas.common import ApiResponse
 from app.schemas.intervention import InterventionDetailOut, InterventionOut
 from app.schemas.pagination import Page
 from app.services import approval_service
 
 router = APIRouter(tags=["approvals"])
+
+
+@router.get("/approvals/my-recent-decisions", response_model=ApiResponse[list[RecentApprovalDecision]])
+def my_recent_decisions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("chef_technicien", "admin_supervisor")),
+) -> ApiResponse[list[RecentApprovalDecision]]:
+    return ApiResponse(data=approval_service.list_my_recent_decisions(db, current_user.id))
 
 
 @router.get("/approvals/technical-pending", response_model=ApiResponse[Page[InterventionOut]])

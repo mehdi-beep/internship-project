@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.enums import InterventionStatus, InterventionType
 from app.models.intervention import Intervention
 from app.models.intervention_task import InterventionTask
+from app.models.intervention_technician import InterventionTechnician
 
 
 def list_query(
@@ -17,6 +18,7 @@ def list_query(
     date_from: date | None,
     date_to: date | None,
     search: str | None,
+    colleague_technician_id: int | None = None,
 ) -> Select:
     stmt = select(Intervention)
     if technician_id is not None:
@@ -35,6 +37,10 @@ def list_query(
         stmt = stmt.where(Intervention.intervention_date <= date_to)
     if search:
         stmt = stmt.where(Intervention.bi_number.ilike(f"%{search}%"))
+    if colleague_technician_id is not None:
+        stmt = stmt.join(InterventionTechnician, InterventionTechnician.intervention_id == Intervention.id).where(
+            InterventionTechnician.user_id == colleague_technician_id
+        )
     return stmt.order_by(Intervention.created_at.desc())
 
 
@@ -50,6 +56,7 @@ def get_with_details(db: Session, intervention_id: int) -> Intervention | None:
             selectinload(Intervention.attachments),
             selectinload(Intervention.approval_history),
             selectinload(Intervention.audit_log),
+            selectinload(Intervention.colleague_technicians),
         )
         .where(Intervention.id == intervention_id)
     )
@@ -80,6 +87,13 @@ def replace_tasks(db: Session, intervention_id: int, travail_ids: list[int]) -> 
     db.query(InterventionTask).filter(InterventionTask.intervention_id == intervention_id).delete()
     for travail_id in travail_ids:
         db.add(InterventionTask(intervention_id=intervention_id, travail_id=travail_id))
+    db.commit()
+
+
+def replace_colleague_technicians(db: Session, intervention_id: int, user_ids: list[int]) -> None:
+    db.query(InterventionTechnician).filter(InterventionTechnician.intervention_id == intervention_id).delete()
+    for user_id in user_ids:
+        db.add(InterventionTechnician(intervention_id=intervention_id, user_id=user_id))
     db.commit()
 
 

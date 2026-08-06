@@ -1,4 +1,4 @@
-import { fetchPage, postOne } from "../api/queryHelpers";
+import { fetchOne, fetchPage, postOne } from "../api/queryHelpers";
 import type { Intervention, InterventionDetail } from "../types/intervention";
 
 export type ApprovalDecision = "approved" | "rejected";
@@ -7,6 +7,17 @@ export interface ApprovalDecisionInput {
   decision: ApprovalDecision;
   comment?: string | null;
 }
+
+export interface RecentApprovalDecision {
+  intervention_id: number;
+  bi_number: string;
+  approval_level: "technical" | "administrative";
+  decision: ApprovalDecision;
+  approval_date: string;
+}
+
+export const listMyRecentDecisions = () =>
+  fetchOne<RecentApprovalDecision[]>("/approvals/my-recent-decisions");
 
 export const listTechnicalPending = (params: { page?: number; page_size?: number } = {}) =>
   fetchPage<Intervention>("/approvals/technical-pending", params);

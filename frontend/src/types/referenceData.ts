@@ -57,6 +57,12 @@ export interface Travail {
   updated_at: string;
 }
 
+export interface TechnicianOption {
+  id: number;
+  first_name: string;
+  last_name: string;
+}
+
 export interface AppUser {
   id: number;
   first_name: string;
