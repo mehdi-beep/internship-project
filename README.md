@@ -187,7 +187,7 @@ above. This section covers what to set, how to deploy, and how to verify it work
 |---|---|---|
 | `DATABASE_URL` | `sqlite:///./dev.db` (resolves to `/app/dev.db`, since the container's working directory is `/app`) | Only if you want PostgreSQL instead — point it at a Railway-provisioned Postgres plugin's connection string (`postgresql+psycopg://...`) |
 | `SECRET_KEY` | `dev-secret-key-not-for-production` | **Yes, before sharing the URL with anyone.** This repo is public — the default is visible to anyone who reads it, so anyone could forge valid login tokens against a deployment still using it. Set a real random value as a Railway service variable. |
-| `CORS_ORIGINS` | `*` (allow any origin) | Yes, once your frontend has a real URL — set it to that exact origin (e.g. `https://your-frontend.up.railway.app`), since browsers reject `*` for credentialed requests (this API sends cookies/auth headers) |
+| `CORS_ORIGINS` | `*` (allow any origin) | Works out of the box for any frontend origin (Vercel or otherwise) — auth is Bearer-token-only, so the wildcard is browser-safe here. Recommended hardening once your frontend has a real URL: narrow this to that exact origin (e.g. `https://your-frontend.vercel.app`) so no other site can call the API from a browser. |
 | `JWT_ALGORITHM`, `JWT_EXPIRE_MINUTES`, `UPLOAD_FOLDER`, `MAX_UPLOAD_SIZE`, `APP_NAME`, `DEBUG` | Same defaults as local dev (see `.env.example`) | Optional |
 
 Set any of these as **Railway service variables** (Railway's dashboard → your service →
@@ -243,6 +243,58 @@ Practically, this means:
    ```
    A successful response includes an `access_token` — confirming both the app booted
    and the pre-seeded database is being read correctly.
+
+## Running on Vercel
+
+The frontend deploys as a static Vite build. It already reads the backend's URL from an
+environment variable (`VITE_API_URL`, see `frontend/src/api/client.ts`) rather than a
+hardcoded address, so no code changes are needed — only Vercel-side configuration.
+
+**Prerequisite**: deploy the backend to Railway first (see [Running on
+Railway](#running-on-railway) above) — you need that URL before setting up Vercel, since
+it becomes the value of `VITE_API_URL` below.
+
+### Vercel project setup
+
+1. In Vercel, import this GitHub repo as a new project.
+2. Set the project's **root directory** to `frontend/` (same reasoning as Railway's
+   `backend/` root directory — this is a monorepo, the deployable app isn't at repo root).
+3. Vercel auto-detects the Vite framework preset from `frontend/package.json` — build
+   command `npm run build`, output directory `dist`. Confirmed locally: `npm run build`
+   (`tsc -b && vite build`) builds cleanly to `dist/`, so no manual override is needed.
+
+### Required environment variable
+
+| Variable | Value | Notes |
+|---|---|---|
+| `VITE_API_URL` | Your Railway backend's public URL + `/api`, e.g. `https://your-backend.up.railway.app/api` | **Must be set before/at build time**, not after. Vite inlines `import.meta.env.VITE_API_URL` directly into the static JS bundle at build time — changing this value later requires a new deploy (Vercel → your project → Settings → Environment Variables, then redeploy), not just a service restart. This is different from how Railway's variables work (those are read live at container start). |
+
+Set it in Vercel → your project → Settings → Environment Variables, for the
+Production (and Preview, if you want preview deployments to also reach the real
+backend) environment, then deploy.
+
+### Backend CORS — nothing to configure by default
+
+Railway's `CORS_ORIGINS=*` default (see the Railway section above) already accepts
+requests from any Vercel domain out of the box — no Railway changes are required to get
+a working deployment. Once you have a stable Vercel URL and want to lock this down
+(recommended for anything beyond a demo), set Railway's `CORS_ORIGINS` to that exact
+origin, e.g. `CORS_ORIGINS=https://your-frontend.vercel.app`.
+
+### Verifying a successful deployment
+
+1. Open the Vercel URL — the login page should load. This confirms the static build and
+   the `vercel.json` SPA rewrite (needed so client-side routes like `/dashboard` don't
+   404 on a direct load or refresh) are both working.
+2. Log in with a seeded account (e.g. `tech02` / `Password123!`).
+3. Confirm a data-driven page (e.g. Dashboard) shows real data, not an error state — this
+   confirms `VITE_API_URL` is correctly reaching the Railway backend and CORS is
+   accepting the cross-origin request.
+4. If step 2 or 3 fails, open the browser DevTools Console/Network tab: a CORS error
+   there specifically points to a `VITE_API_URL`/`CORS_ORIGINS` mismatch, while a network
+   error (failed to fetch, no response) more likely means `VITE_API_URL` is wrong or the
+   Railway service isn't running — check `/api/health` on the Railway URL directly to
+   tell these apart.
 
 ## Running Tests
 
