@@ -78,7 +78,7 @@ npm run dev
 - Swagger docs: http://localhost:8000/docs
 
 Log in with any of the [seeded credentials](#seeding-the-database) below (e.g.
-`tech01` / `Password123!`). This path is for local development and evaluation only —
+`tech02` / `Password123!`). This path is for local development and evaluation only —
 see "Running the Backend" and "Running the Database" further down for the
 PostgreSQL-backed setup those sections describe.
 
@@ -239,14 +239,14 @@ Practically, this means:
    ```bash
    curl -X POST https://<your-service>.up.railway.app/api/auth/login \
      -H "Content-Type: application/json" \
-     -d '{"username":"tech01","password":"Password123!"}'
+     -d '{"username":"tech02","password":"Password123!"}'
    ```
    A successful response includes an `access_token` — confirming both the app booted
    and the pre-seeded database is being read correctly.
 
 ## Running Tests
 
-The backend has a permanent pytest suite (121 tests) covering authentication, business logic (duration/point calculation, status transitions), planning, interventions, approvals, reference-data CRUD, dashboards, reports, and technician performance:
+The backend has a permanent pytest suite (122 tests) covering authentication, business logic (duration/point calculation, status transitions), planning, interventions, approvals, reference-data CRUD, dashboards, reports, and technician performance:
 
 ```bash
 cd backend
