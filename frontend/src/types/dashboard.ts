@@ -7,8 +7,11 @@ export interface ChartPoint {
 
 export interface PlanningSummary {
   id: number;
+  client_id: number;
   client_name: string;
+  site_id: number;
   site_name: string;
+  planned_date: string;
   planned_start_time: string;
   priority: Priority;
   status: string;
@@ -22,6 +25,17 @@ export interface InterventionSummary {
   intervention_date: string;
 }
 
+export interface ActionableInterventionSummary {
+  id: number;
+  bi_number: string;
+  client_name: string;
+  intervention_type: string;
+  status: string;
+  intervention_date: string;
+  rejection_reason: string | null;
+  rejection_level: string | null;
+}
+
 export interface TechnicianDashboard {
   planned_today: number;
   completed_today: number;
@@ -31,6 +45,8 @@ export interface TechnicianDashboard {
   monthly_points: number;
   average_daily_duration_minutes: number;
   today_planning: PlanningSummary[];
+  draft_interventions: ActionableInterventionSummary[];
+  rejected_interventions: ActionableInterventionSummary[];
   recently_completed: InterventionSummary[];
   weekly_completed_chart: ChartPoint[];
   monthly_points_chart: ChartPoint[];

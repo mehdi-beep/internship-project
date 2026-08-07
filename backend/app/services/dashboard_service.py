@@ -1,17 +1,19 @@
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.models.approval_history import ApprovalHistory
 from app.models.client import Client
 from app.models.client_site import ClientSite
 from app.models.intervention import Intervention
-from app.models.enums import InterventionStatus, Priority
+from app.models.enums import ApprovalDecision, InterventionStatus, Priority
 from app.models.planning import Planning
 from app.models.role import RoleName
 from app.models.user import User
 from app.schemas.dashboard import (
+    ActionableInterventionSummary,
     AdminDashboard,
     AdminDashboardCharts,
     ChartPoint,
@@ -97,23 +99,93 @@ def get_technician_dashboard(db: Session, technician_id: int) -> TechnicianDashb
         )
     )
 
+    # Today's planning, plus any active urgent entry from today onward (an
+    # urgent job assigned for a future date must stay visible immediately,
+    # not just wait until its own day — Ch.30 "urgent interventions bypass
+    # normal planning"). A single query with an OR, not two separate ones,
+    # so an entry that's both today's AND urgent is never duplicated.
     today_rows = db.execute(
         select(Planning, Client.client_name, ClientSite.site_name)
         .join(Client, Planning.client_id == Client.id)
         .join(ClientSite, Planning.site_id == ClientSite.id)
-        .where(Planning.technician_id == technician_id, Planning.planned_date == today, Planning.status != "cancelled")
-        .order_by(Planning.planned_start_time)
+        .where(
+            Planning.technician_id == technician_id,
+            Planning.status != "cancelled",
+            or_(
+                Planning.planned_date == today,
+                (Planning.priority == Priority.URGENT) & (Planning.planned_date >= today),
+            ),
+        )
+        # Urgent work always surfaces first regardless of date, then
+        # chronological — matches the Chef's own urgent-queue ordering intent.
+        .order_by((Planning.priority == Priority.URGENT).desc(), Planning.planned_date, Planning.planned_start_time)
     ).all()
     today_planning = [
         PlanningSummary(
             id=p.id,
+            client_id=p.client_id,
             client_name=client_name,
+            site_id=p.site_id,
             site_name=site_name,
+            planned_date=p.planned_date,
             planned_start_time=p.planned_start_time,
             priority=p.priority,
             status=p.status.value,
         )
         for p, client_name, site_name in today_rows
+    ]
+
+    draft_rows = db.execute(
+        select(Intervention, Client.client_name)
+        .join(Client, Intervention.client_id == Client.id)
+        .where(Intervention.technician_id == technician_id, Intervention.status == InterventionStatus.DRAFT)
+        .order_by(Intervention.updated_at.desc())
+    ).all()
+    draft_interventions = [
+        ActionableInterventionSummary(
+            id=i.id,
+            bi_number=i.bi_number,
+            client_name=client_name,
+            intervention_type=i.intervention_type.value,
+            status=i.status.value,
+            intervention_date=i.intervention_date,
+        )
+        for i, client_name in draft_rows
+    ]
+
+    rejected_rows = db.execute(
+        select(Intervention, Client.client_name)
+        .join(Client, Intervention.client_id == Client.id)
+        .where(Intervention.technician_id == technician_id, Intervention.status == InterventionStatus.REJECTED)
+        .order_by(Intervention.updated_at.desc())
+    ).all()
+    rejected_ids = [i.id for i, _ in rejected_rows]
+    # One extra query for every rejected intervention's most recent rejection
+    # reason/level, rather than one query per row (N+1) — matched up in
+    # Python below since a single SQL query can't easily express "the latest
+    # row per group" portably across SQLite/Postgres.
+    latest_rejection_by_intervention: dict[int, ApprovalHistory] = {}
+    if rejected_ids:
+        rejection_history_rows = db.scalars(
+            select(ApprovalHistory)
+            .where(ApprovalHistory.intervention_id.in_(rejected_ids), ApprovalHistory.decision == ApprovalDecision.REJECTED)
+            .order_by(ApprovalHistory.approval_date.desc())
+        ).all()
+        for entry in rejection_history_rows:
+            latest_rejection_by_intervention.setdefault(entry.intervention_id, entry)
+
+    rejected_interventions = [
+        ActionableInterventionSummary(
+            id=i.id,
+            bi_number=i.bi_number,
+            client_name=client_name,
+            intervention_type=i.intervention_type.value,
+            status=i.status.value,
+            intervention_date=i.intervention_date,
+            rejection_reason=(rej := latest_rejection_by_intervention.get(i.id)) and rej.comment,
+            rejection_level=rej.approval_level.value if rej else None,
+        )
+        for i, client_name in rejected_rows
     ]
 
     completed_rows = db.execute(
@@ -142,6 +214,8 @@ def get_technician_dashboard(db: Session, technician_id: int) -> TechnicianDashb
         monthly_points=monthly_points,
         average_daily_duration_minutes=round(float(avg_duration or 0), 1),
         today_planning=today_planning,
+        draft_interventions=draft_interventions,
+        rejected_interventions=rejected_interventions,
         recently_completed=recently_completed,
         weekly_completed_chart=weekly_completed_chart,
         monthly_points_chart=monthly_points_chart,
@@ -495,7 +569,8 @@ def get_chef_dashboard(db: Session) -> ChefDashboard:
     ).all()
     today_planning = [
         PlanningSummary(
-            id=p.id, client_name=client_name, site_name=site_name, planned_start_time=p.planned_start_time,
+            id=p.id, client_id=p.client_id, client_name=client_name, site_id=p.site_id, site_name=site_name,
+            planned_date=p.planned_date, planned_start_time=p.planned_start_time,
             priority=p.priority, status=p.status.value,
         )
         for p, client_name, site_name in today_rows
@@ -529,7 +604,8 @@ def get_chef_dashboard(db: Session) -> ChefDashboard:
     ).all()
     urgent_queue = [
         PlanningSummary(
-            id=p.id, client_name=client_name, site_name=site_name, planned_start_time=p.planned_start_time,
+            id=p.id, client_id=p.client_id, client_name=client_name, site_id=p.site_id, site_name=site_name,
+            planned_date=p.planned_date, planned_start_time=p.planned_start_time,
             priority=p.priority, status=p.status.value,
         )
         for p, client_name, site_name in urgent_rows

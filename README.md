@@ -2,7 +2,7 @@
 
 Digital replacement for the company's paper-based intervention workflow. See [`project_specifications.md`](project_specifications.md) for the full SRS, [`TASKS.md`](TASKS.md) for the phased task breakdown, [`DATABASE_SCHEMA.md`](DATABASE_SCHEMA.md) for the data model, and [`API_SPEC.md`](API_SPEC.md) for the endpoint contracts.
 
-**Status:** Phases 1–9 complete (Init, Database, Auth, Reference Data, Planning, Interventions, Business Logic, Approvals, Dashboards & Reporting). Phase 10 (Testing, Cleanup, Docs) is in progress — see [`TASKS.md`](TASKS.md) for the exact remaining items.
+**Status:** Phases 1–10 complete (Init, Database, Auth, Reference Data, Planning, Interventions, Business Logic, Approvals, Dashboards & Reporting, Testing & Cleanup). See [`TASKS.md`](TASKS.md) for the full phased breakdown.
 
 ## Tech Stack
 
@@ -124,7 +124,7 @@ python -m venv venv
 ./venv/Scripts/activate      # Windows
 pip install -r requirements.txt
 cp .env.example .env         # adjust if needed
-alembic upgrade head          # applies full schema (14 tables, Phase 1 + Phase 2)
+alembic upgrade head          # applies full schema (15 tables, Phase 1 + Phase 2)
 uvicorn main:app --reload
 ```
 
@@ -176,7 +176,7 @@ Starts Postgres, backend (with hot reload), and frontend (with hot reload) toget
 
 ## Running Tests
 
-The backend has a permanent pytest suite (122 tests) covering authentication, business logic (duration/point calculation, status transitions), planning, interventions, approvals, reference-data CRUD, dashboards, reports, and technician performance:
+The backend has a permanent pytest suite (127 tests) covering authentication, business logic (duration/point calculation, status transitions), planning, interventions, approvals, reference-data CRUD, dashboards, reports, and technician performance:
 
 ```bash
 cd backend
@@ -198,7 +198,7 @@ The project is built incrementally, one phase at a time, per [`TASKS.md`](TASKS.
 7. Business Logic (duration, points, warranty, status transitions) *(done)*
 8. Approval Workflow *(done)*
 9. Dashboards & Reporting *(done)*
-10. Testing & Cleanup *(in progress)*
+10. Testing & Cleanup *(done)*
 
 Business rules — for example ["cities are never typed manually"](project_specifications.md), ["interventions are never deleted"](project_specifications.md), or the point/duration formulas — are enforced **only** in `backend/app/services/`. The frontend displays data and calls the API; it never recalculates anything the backend already computed.
 

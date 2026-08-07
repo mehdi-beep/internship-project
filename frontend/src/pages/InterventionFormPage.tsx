@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -89,6 +89,15 @@ export default function InterventionFormPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
+  // Optional pre-fill for a fresh intervention started from a dashboard
+  // planning/urgent assignment — never present on the edit route, so this
+  // has no effect on the isEdit path at all. Read once on mount, matching
+  // the same query-param deep-link pattern PlanningPage.tsx already uses.
+  const [searchParams] = useSearchParams();
+  const prefillClientId = !isEdit ? Number(searchParams.get("client_id")) || 0 : 0;
+  const prefillSiteId = !isEdit ? Number(searchParams.get("site_id")) || 0 : 0;
+  const prefillDate = !isEdit ? searchParams.get("intervention_date") : null;
+
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
 
@@ -101,15 +110,15 @@ export default function InterventionFormPage() {
 
   const { register, handleSubmit, control, reset, setValue, formState: { errors } } = useForm<FormValues>({
     defaultValues: {
-      client_id: 0,
-      site_id: 0,
+      client_id: prefillClientId,
+      site_id: prefillSiteId,
       contact_person: "",
       intervention_type: "standard",
       contract_id: "",
       project_id: "",
       warranty_reference_bi: "",
       location_type: "sur_site",
-      intervention_date: dayjs().format("YYYY-MM-DD"),
+      intervention_date: prefillDate || dayjs().format("YYYY-MM-DD"),
       start_time: "08:00",
       end_time: "17:00",
       no_lunch_break: false,

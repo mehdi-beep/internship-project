@@ -10,12 +10,21 @@ def test_technician_dashboard_shape_and_role_gating(client, auth_headers):
     data = response.json()["data"]
     for key in [
         "planned_today", "completed_today", "pending_approval", "rejected", "draft_count", "monthly_points",
-        "average_daily_duration_minutes", "today_planning",
+        "average_daily_duration_minutes", "today_planning", "draft_interventions", "rejected_interventions",
         "recently_completed", "weekly_completed_chart", "monthly_points_chart",
     ]:
         assert key in data
     assert len(data["weekly_completed_chart"]) == 7
     assert len(data["monthly_points_chart"]) == 6
+    assert data["draft_count"] == len(data["draft_interventions"])
+    assert data["rejected"] == len(data["rejected_interventions"])
+    if data["rejected_interventions"]:
+        # Every rejected row must resolve to a real approval-history decision,
+        # not just a bare status — the whole point of this list is to tell
+        # the technician *why* it was rejected without opening it first.
+        first = data["rejected_interventions"][0]
+        assert first["rejection_level"] in ("technical", "administrative")
+        assert "bi_number" in first and "intervention_type" in first
 
     assert client.get("/api/dashboard/technician", headers=chef).status_code == 403
 
@@ -81,6 +90,43 @@ def test_dashboard_lists_and_charts_are_bounded(client, auth_headers):
     chef_data = client.get("/api/dashboard/supervisor", headers=chef).json()["data"]
     assert len(chef_data["interventions_by_client_chart"]) <= 10
     assert len(chef_data["urgent_queue"]) <= 10
+
+
+def test_technician_dashboard_surfaces_future_dated_urgent_assignment(client, auth_headers):
+    # Regression guard for the behavior change: today_planning used to be
+    # scoped strictly to planned_date == today, so an urgent assignment
+    # scheduled for a future date wouldn't appear until its own day — Ch.30
+    # ("urgent interventions bypass normal planning") requires it to stay
+    # visible immediately instead.
+    admin = auth_headers("admin01")
+    tech1 = auth_headers("tech01")
+
+    clients_response = client.get("/api/clients", headers=admin, params={"page_size": 1})
+    client_id = clients_response.json()["data"]["items"][0]["id"]
+    sites_response = client.get(f"/api/clients/{client_id}/sites", headers=admin)
+    site_id = sites_response.json()["data"]["items"][0]["id"]
+    technicians_response = client.get("/api/users?role=technician", headers=admin, params={"page_size": 100})
+    tech01_id = next(u["id"] for u in technicians_response.json()["data"]["items"] if u["username"] == "tech01")
+
+    created = client.post(
+        "/api/planning",
+        json={
+            "technician_id": tech01_id, "client_id": client_id, "site_id": site_id,
+            "planned_date": "2027-01-15",  # far in the future, not "today" by any reasonable clock
+            "planned_start_time": "08:00:00", "priority": "urgent",
+        },
+        headers=admin,
+    )
+    assert created.status_code == 200
+    planning_id = created.json()["data"]["id"]
+
+    dashboard = client.get("/api/dashboard/technician", headers=tech1).json()["data"]
+    match = next((p for p in dashboard["today_planning"] if p["id"] == planning_id), None)
+    assert match is not None, "future-dated urgent entry must still appear in today_planning"
+    assert match["priority"] == "urgent"
+    assert match["planned_date"] == "2027-01-15"
+    assert match["client_id"] == client_id
+    assert match["site_id"] == site_id
 
 
 class TestDashboardChartsEndpoints:

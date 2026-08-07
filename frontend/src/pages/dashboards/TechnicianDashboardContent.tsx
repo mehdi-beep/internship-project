@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import {
+  Box,
   Button,
   Chip,
   Grid,
@@ -21,7 +22,7 @@ import QueryStateGate from "../../components/QueryStateGate";
 import PeriodModeSelector, { type PeriodMode } from "../../components/PeriodModeSelector";
 import { getTechnicianDashboard, getTechnicianDashboardCharts } from "../../services/dashboardService";
 import { priorityColors } from "../../styles/theme";
-import type { TechnicianDashboard } from "../../types/dashboard";
+import type { ActionableInterventionSummary, PlanningSummary, TechnicianDashboard } from "../../types/dashboard";
 
 export default function TechnicianDashboardContent() {
   const { data, isLoading, isError, error, refetch } = useQuery({
@@ -45,6 +46,22 @@ function TechnicianDashboardBody({ data }: { data: TechnicianDashboard }) {
     queryKey: ["dashboard", "technician", "charts", mode, anchor],
     queryFn: () => getTechnicianDashboardCharts(mode, anchor),
   });
+
+  // Clicking a planned/urgent assignment opens a pre-filled New Intervention
+  // form — Planning entries never link to a real Intervention row in this
+  // app (confirmed: nothing ever sets Planning.intervention_id), so there is
+  // no existing intervention to open yet. Carrying over what the Chef/Admin
+  // already specified means the technician never has to re-select it.
+  const openAssignment = (p: PlanningSummary) => {
+    const params = new URLSearchParams({
+      client_id: String(p.client_id),
+      site_id: String(p.site_id),
+      intervention_date: p.planned_date,
+    });
+    navigate(`/interventions/new?${params.toString()}`);
+  };
+
+  const openForEdit = (i: ActionableInterventionSummary) => navigate(`/interventions/${i.id}/edit`);
 
   return (
     <Stack spacing={3}>
@@ -95,20 +112,40 @@ function TechnicianDashboardBody({ data }: { data: TechnicianDashboard }) {
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 4 }}>
-          <ChartCard title="Today's Planning" height={260}>
+          <ChartCard title="Today's Planning / Assigned Interventions" height={320}>
             {data.today_planning.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
-                No planning for today.
+                No assignments right now.
               </Typography>
             ) : (
-              <List dense sx={{ overflow: "auto", maxHeight: 260 }}>
+              <List dense sx={{ overflow: "auto", maxHeight: 320 }}>
                 {data.today_planning.map((p) => (
-                  <ListItem key={p.id} divider>
-                    <ListItemText
-                      primary={`${p.planned_start_time.slice(0, 5)} — ${p.client_name}`}
-                      secondary={p.site_name}
-                    />
-                    {p.priority === "urgent" && <Chip size="small" label="Urgent" sx={{ bgcolor: priorityColors.urgent, color: "#fff" }} />}
+                  <ListItem key={p.id} divider disablePadding>
+                    <ListItemButton onClick={() => openAssignment(p)} sx={{ alignItems: "flex-start" }}>
+                      <ListItemText
+                        primary={
+                          <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                              {p.client_name}
+                            </Typography>
+                            {p.priority === "urgent" && (
+                              <Chip size="small" label="Urgent" sx={{ bgcolor: priorityColors.urgent, color: "#fff" }} />
+                            )}
+                          </Stack>
+                        }
+                        secondary={
+                          <>
+                            {p.site_name}
+                            <br />
+                            {dayjs(p.planned_date).format("MMM D, YYYY")} — {p.planned_start_time.slice(0, 5)}
+                            {"  ·  "}
+                            <Typography component="span" variant="caption" sx={{ textTransform: "capitalize" }}>
+                              {p.status.replace("_", " ")}
+                            </Typography>
+                          </>
+                        }
+                      />
+                    </ListItemButton>
                   </ListItem>
                 ))}
               </List>
@@ -116,35 +153,83 @@ function TechnicianDashboardBody({ data }: { data: TechnicianDashboard }) {
           </ChartCard>
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
-          <ChartCard title="Draft / Pending Actions" height={260}>
-            <Stack spacing={2}>
-              <Stack direction="row" sx={{ justifyContent: "space-between" }}>
-                <Typography variant="body2">Draft</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                  {data.draft_count}
+          <ChartCard title="Draft &amp; Pending Actions" height={320}>
+            <Stack spacing={1.5} sx={{ height: "100%", overflow: "auto" }}>
+              <Box>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                  DRAFT ({data.draft_interventions.length})
                 </Typography>
-              </Stack>
-              <Stack direction="row" sx={{ justifyContent: "space-between" }}>
-                <Typography variant="body2">Rejected</Typography>
+                {data.draft_interventions.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+                    No drafts.
+                  </Typography>
+                ) : (
+                  <List dense disablePadding>
+                    {data.draft_interventions.map((i) => (
+                      <ListItem key={i.id} divider disablePadding>
+                        <ListItemButton onClick={() => openForEdit(i)}>
+                          <ListItemText primary={i.bi_number} secondary={i.client_name} />
+                        </ListItemButton>
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+              </Box>
+
+              <Box>
                 <Typography
-                  variant="body2"
+                  variant="caption"
                   sx={{ fontWeight: 700 }}
-                  color={data.rejected > 0 ? "error" : undefined}
+                  color={data.rejected_interventions.length > 0 ? "error" : "text.secondary"}
                 >
-                  {data.rejected}
+                  REJECTED — ACTION REQUIRED ({data.rejected_interventions.length})
                 </Typography>
-              </Stack>
+                {data.rejected_interventions.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+                    No rejected interventions.
+                  </Typography>
+                ) : (
+                  <List dense disablePadding>
+                    {data.rejected_interventions.map((i) => (
+                      <ListItem key={i.id} divider disablePadding>
+                        <ListItemButton
+                          onClick={() => openForEdit(i)}
+                          sx={{ borderLeft: "3px solid", borderColor: "error.main" }}
+                        >
+                          <ListItemText
+                            primary={
+                              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                  {i.bi_number}
+                                </Typography>
+                                <Chip size="small" color="error" label="Needs correction" />
+                              </Stack>
+                            }
+                            secondary={
+                              <>
+                                {i.client_name}
+                                <br />
+                                {i.rejection_reason ?? "No reason provided."}
+                              </>
+                            }
+                          />
+                        </ListItemButton>
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+              </Box>
             </Stack>
           </ChartCard>
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
-          <ChartCard title="Recently Completed" height={260}>
+          <ChartCard title="Recently Completed" height={320}>
             {data.recently_completed.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
                 No completed interventions yet.
               </Typography>
             ) : (
-              <List dense sx={{ overflow: "auto", maxHeight: 260 }}>
+              <List dense sx={{ overflow: "auto", maxHeight: 320 }}>
                 {data.recently_completed.map((i) => (
                   <ListItem key={i.id} divider disablePadding>
                     <ListItemButton onClick={() => navigate(`/interventions/${i.id}`)}>

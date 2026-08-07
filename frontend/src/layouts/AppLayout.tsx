@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import {
   AppBar,
   Avatar,
+  Badge,
   Box,
   Chip,
   Divider,
@@ -30,6 +31,7 @@ import NotificationsIcon from "@mui/icons-material/NotificationsOutlined";
 import LogoutIcon from "@mui/icons-material/LogoutOutlined";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useNotificationPollingContext } from "../context/NotificationPollingContext";
 import type { UserRole } from "../types/enums";
 
 const DRAWER_WIDTH = 240;
@@ -80,6 +82,7 @@ const NAV_ITEMS_BY_ROLE: Record<UserRole, NavItem[]> = {
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
+  const { unreadCount } = useNotificationPollingContext();
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
@@ -113,7 +116,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             title={isTablet ? item.label : undefined}
           >
             <ListItemIcon sx={isTablet ? { minWidth: 0, justifyContent: "center" } : undefined}>
-              {item.icon}
+              {item.path === "/notifications" && unreadCount > 0 ? (
+                <Badge badgeContent={unreadCount} color="error" max={99}>
+                  {item.icon}
+                </Badge>
+              ) : (
+                item.icon
+              )}
             </ListItemIcon>
             {!isTablet && <ListItemText primary={item.label} />}
           </ListItemButton>

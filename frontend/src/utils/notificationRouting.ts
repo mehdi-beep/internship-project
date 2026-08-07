@@ -1,3 +1,4 @@
+import { getPlanning } from "../services/planningService";
 import type { Notification } from "../types/notification";
 import type { UserRole } from "../types/enums";
 
@@ -23,20 +24,40 @@ const INTERVENTION_TITLES = new Set([
 
 /**
  * Resolves where clicking a notification should navigate, or null if it has
- * no target. Planning-titled notifications are always technician-targeted in
- * practice, but routing still depends on the viewer's role: chefs have
- * /planning (which supports ?highlight=), while technicians have no page
- * that renders an individual Planning row, so they land on their
- * interventions list instead of a dead link.
+ * no target. Async because a technician-facing planning notification needs
+ * to look up the referenced Planning entry first: Planning.intervention_id
+ * is never set anywhere in this application (confirmed — no code path ever
+ * creates the eventual real intervention record from a planning entry), so
+ * there's no existing intervention to link a technician to. Instead, this
+ * resolves the assignment's client/site/date and builds a pre-filled
+ * "/interventions/new" link — the same query-param pre-fill mechanism the
+ * Technician Dashboard's Planned/Urgent card uses (see
+ * TechnicianDashboardContent.tsx) — so clicking the notification takes the
+ * technician straight into starting that specific assignment's intervention,
+ * not a generic, unrelated list.
  */
-export function resolveNotificationPath(notification: Notification, role: UserRole): string | null {
+export async function resolveNotificationPath(notification: Notification, role: UserRole): Promise<string | null> {
   if (PLANNING_TITLES.has(notification.title)) {
-    if (role === "chef_technicien") {
+    if (role === "chef_technicien" || role === "admin_supervisor") {
       return notification.related_planning_id != null
         ? `/planning?highlight=${notification.related_planning_id}`
         : "/planning";
     }
-    return "/interventions";
+    // Technician: resolve the specific assignment, not the generic list.
+    if (notification.related_planning_id == null) return "/interventions";
+    try {
+      const planning = await getPlanning(notification.related_planning_id);
+      const params = new URLSearchParams({
+        client_id: String(planning.client_id),
+        site_id: String(planning.site_id),
+        intervention_date: planning.planned_date,
+      });
+      return `/interventions/new?${params.toString()}`;
+    } catch {
+      // Planning entry no longer resolvable (e.g. permission edge case) —
+      // fall back to the list rather than leave the click dead.
+      return "/interventions";
+    }
   }
   if (INTERVENTION_TITLES.has(notification.title)) {
     return notification.related_intervention_id != null

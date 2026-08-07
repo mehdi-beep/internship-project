@@ -12,8 +12,11 @@ class ChartPoint(BaseModel):
 
 class PlanningSummary(BaseModel):
     id: int
+    client_id: int
     client_name: str
+    site_id: int
     site_name: str
+    planned_date: date
     planned_start_time: time
     priority: Priority
     status: str
@@ -25,6 +28,22 @@ class InterventionSummary(BaseModel):
     client_name: str
     status: str
     intervention_date: date
+
+
+class ActionableInterventionSummary(BaseModel):
+    """Draft/Rejected rows on the technician dashboard — unlike InterventionSummary
+    (used for "Recently Completed"), this carries the intervention_type and, for
+    rejected rows, the most recent rejection's reason/level so the technician can
+    see what needs fixing without opening the intervention first."""
+
+    id: int
+    bi_number: str
+    client_name: str
+    intervention_type: str
+    status: str
+    intervention_date: date
+    rejection_reason: str | None = None
+    rejection_level: str | None = None
 
 
 # --- Technician (Ch.108) ---
@@ -39,6 +58,8 @@ class TechnicianDashboard(BaseModel):
     monthly_points: int
     average_daily_duration_minutes: float
     today_planning: list[PlanningSummary]
+    draft_interventions: list[ActionableInterventionSummary]
+    rejected_interventions: list[ActionableInterventionSummary]
     recently_completed: list[InterventionSummary]
     weekly_completed_chart: list[ChartPoint]
     monthly_points_chart: list[ChartPoint]

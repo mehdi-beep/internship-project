@@ -19,6 +19,8 @@ import {
   markNotificationRead,
 } from "../services/notificationService";
 import { resolveNotificationPath } from "../utils/notificationRouting";
+import { categorizeNotification } from "../utils/notificationCategory";
+import { notificationCategoryColors } from "../styles/theme";
 import { useAuth } from "../context/AuthContext";
 import type { Notification } from "../types/notification";
 
@@ -52,10 +54,11 @@ export default function NotificationsPage() {
       markReadMutation.mutate(notification);
     }
     if (!user) return;
-    const path = resolveNotificationPath(notification, user.role);
-    if (path) {
-      navigate(path);
-    }
+    resolveNotificationPath(notification, user.role).then((path) => {
+      if (path) {
+        navigate(path);
+      }
+    });
   };
 
   return (
@@ -97,6 +100,8 @@ export default function NotificationsPage() {
                 bgcolor: notification.read ? "transparent" : "action.hover",
                 borderBottom: "1px solid",
                 borderColor: "divider",
+                borderLeft: "4px solid",
+                borderLeftColor: notificationCategoryColors[categorizeNotification(notification)],
               }}
             >
               <ListItemText

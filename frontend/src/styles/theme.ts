@@ -1,5 +1,6 @@
 import { createTheme } from "@mui/material/styles";
 import type { InterventionStatus, Priority } from "../types/enums";
+import type { NotificationCategory } from "../utils/notificationCategory";
 
 export const statusColors: Record<InterventionStatus, string> = {
   draft: "#9e9e9e",
@@ -17,6 +18,13 @@ export const priorityColors: Record<Priority, string> = {
   normal: "#1976d2",
   high: "#ff9800",
   urgent: "#c62828",
+};
+
+export const notificationCategoryColors: Record<NotificationCategory, string> = {
+  urgent: "#c62828",
+  success: "#2e7d32",
+  error: "#d32f2f",
+  info: "#1976d2",
 };
 
 export const theme = createTheme({
