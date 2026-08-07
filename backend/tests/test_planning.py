@@ -220,6 +220,40 @@ def test_created_by_filter_returns_only_own_planning_entries(client, auth_header
     assert any(p["id"] == created["id"] for p in other_results)
 
 
+def test_admin_has_full_planning_parity_with_chef(client, auth_headers):
+    # The Administration Supervisor has the same planning capabilities as the
+    # Chef des Techniciens: create, update, mark urgent, and cancel.
+    admin = auth_headers("admin01")
+    client_id, site_id, tech01_id, _ = _reference_ids(client, admin)
+
+    created = client.post(
+        "/api/planning",
+        json={
+            "technician_id": tech01_id, "client_id": client_id, "site_id": site_id,
+            "planned_date": "2026-11-01", "planned_start_time": "08:00:00", "priority": "normal",
+        },
+        headers=admin,
+    )
+    assert created.status_code == 200
+    planning_id = created.json()["data"]["id"]
+
+    updated = client.put(
+        f"/api/planning/{planning_id}",
+        json={"technician_id": tech01_id, "planned_date": "2026-11-02", "planned_start_time": "09:00:00", "priority": "normal"},
+        headers=admin,
+    )
+    assert updated.status_code == 200
+    assert updated.json()["data"]["planned_date"] == "2026-11-02"
+
+    urgent = client.post(f"/api/planning/{planning_id}/urgent", headers=admin)
+    assert urgent.status_code == 200
+    assert urgent.json()["data"]["priority"] == "urgent"
+
+    cancelled = client.delete(f"/api/planning/{planning_id}", headers=admin)
+    assert cancelled.status_code == 200
+    assert cancelled.json()["data"]["status"] == "cancelled"
+
+
 class TestUrgentQueueReorder:
     def _create_urgent(self, client, chef, admin, planned_date):
         client_id, site_id, tech01_id, _ = _reference_ids(client, admin)
@@ -283,7 +317,7 @@ class TestUrgentQueueReorder:
         )
         assert response.status_code == 400
 
-    def test_only_chef_can_reorder(self, client, auth_headers):
+    def test_only_chef_and_admin_can_reorder(self, client, auth_headers):
         response = client.put(
             "/api/planning/urgent-queue/reorder",
             json={"ordered_ids": []},
@@ -295,4 +329,4 @@ class TestUrgentQueueReorder:
             json={"ordered_ids": []},
             headers=auth_headers("admin01"),
         )
-        assert response.status_code == 403
+        assert response.status_code == 200

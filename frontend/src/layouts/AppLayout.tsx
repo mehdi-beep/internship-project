@@ -64,6 +64,7 @@ const NAV_ITEMS_BY_ROLE: Record<UserRole, NavItem[]> = {
   ],
   admin_supervisor: [
     { label: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
+    { label: "Planning", icon: <EventNoteIcon />, path: "/planning" },
     { label: "Interventions", icon: <AssignmentIcon />, path: "/interventions" },
     { label: "Administrative Approvals", icon: <FactCheckIcon />, path: "/approvals/administrative" },
     { label: "Users", icon: <GroupIcon />, path: "/admin/users" },

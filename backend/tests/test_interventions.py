@@ -187,6 +187,40 @@ class TestVisibilityAndOwnership:
         assert response.status_code == 403
 
 
+class TestPagination:
+    def test_total_and_pages_reflect_every_matching_row_not_just_the_page(self, client, auth_headers):
+        # Regression guard: select_count() previously stripped the entire
+        # FROM/WHERE clause via with_only_columns(func.count()), so `total`
+        # was always 1 regardless of how many rows actually matched — the
+        # page's `items` were correct, only the pagination metadata was wrong.
+        admin = auth_headers("admin01")
+        response = client.get("/api/interventions", headers=admin, params={"page_size": 20})
+        data = response.json()["data"]
+
+        assert len(data["items"]) == 20
+        assert data["total"] > 20  # the seed data has hundreds of interventions
+        assert data["pages"] == -(-data["total"] // data["page_size"])  # ceiling division
+
+    def test_total_shrinks_correctly_when_a_filter_is_applied(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        unfiltered = client.get("/api/interventions", headers=admin, params={"page_size": 1}).json()["data"]
+        filtered = client.get(
+            "/api/interventions", headers=admin, params={"page_size": 1, "status": "fully_approved"}
+        ).json()["data"]
+
+        assert 0 < filtered["total"] < unfiltered["total"]
+
+    def test_second_page_returns_different_rows_than_the_first(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        page1 = client.get("/api/interventions", headers=admin, params={"page": 1, "page_size": 10}).json()["data"]
+        page2 = client.get("/api/interventions", headers=admin, params={"page": 2, "page_size": 10}).json()["data"]
+
+        page1_ids = {i["id"] for i in page1["items"]}
+        page2_ids = {i["id"] for i in page2["items"]}
+        assert page1_ids.isdisjoint(page2_ids)
+        assert page1["total"] == page2["total"]
+
+
 class TestAttachmentValidation:
     def test_unsupported_content_type_rejected(self, client, auth_headers, base_payload):
         tech1 = auth_headers("tech01")

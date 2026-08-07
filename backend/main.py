@@ -53,11 +53,7 @@ app = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
-    # Auth is Bearer-token-only (no cookies, no withCredentials anywhere in the
-    # frontend) — allow_credentials=False lets CORS_ORIGINS=* work as a valid,
-    # browser-safe default for any deployed frontend origin (e.g. Vercel),
-    # since browsers reject a wildcard origin whenever credentials are allowed.
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

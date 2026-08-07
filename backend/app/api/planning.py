@@ -28,7 +28,7 @@ class UrgentQueueReorderInput(BaseModel):
 def reorder_urgent_queue(
     payload: UrgentQueueReorderInput,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("chef_technicien")),
+    _: User = Depends(require_roles("chef_technicien", "admin_supervisor")),
 ) -> ApiResponse[None]:
     planning_service.reorder_urgent_queue(db, payload.ordered_ids)
     return ApiResponse(message="Urgent queue reordered.")
@@ -83,7 +83,7 @@ def get_planning(
 def create_planning(
     payload: PlanningCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("chef_technicien")),
+    current_user: User = Depends(require_roles("chef_technicien", "admin_supervisor")),
 ) -> ApiResponse[PlanningOut]:
     planning = planning_service.create_planning(db, payload, current_user.id)
     return ApiResponse(message="Planning created.", data=PlanningOut.model_validate(planning))
@@ -94,7 +94,7 @@ def update_planning(
     planning_id: int,
     payload: PlanningUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("chef_technicien")),
+    _: User = Depends(require_roles("chef_technicien", "admin_supervisor")),
 ) -> ApiResponse[PlanningOut]:
     planning = planning_service.update_planning(db, planning_id, payload)
     return ApiResponse(message="Planning updated.", data=PlanningOut.model_validate(planning))
@@ -104,7 +104,7 @@ def update_planning(
 def cancel_planning(
     planning_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("chef_technicien")),
+    _: User = Depends(require_roles("chef_technicien", "admin_supervisor")),
 ) -> ApiResponse[PlanningOut]:
     planning = planning_service.cancel_planning(db, planning_id)
     return ApiResponse(message="Planning cancelled.", data=PlanningOut.model_validate(planning))
@@ -114,7 +114,7 @@ def cancel_planning(
 def mark_urgent(
     planning_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("chef_technicien")),
+    _: User = Depends(require_roles("chef_technicien", "admin_supervisor")),
 ) -> ApiResponse[PlanningOut]:
     planning = planning_service.mark_urgent(db, planning_id)
     return ApiResponse(message="Marked as urgent.", data=PlanningOut.model_validate(planning))

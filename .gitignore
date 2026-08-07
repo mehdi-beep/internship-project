@@ -27,3 +27,12 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Internship-defense / personal-prep material — never pushed (per explicit instruction)
+/WORK_SUMMARY.md
+/SYNTHETIC_DATABASE.md
+/internship_report_extraction.md
+/FUTURE_DATABASE_INTEGRATION.md
+/ARCHITECTURE.md
+/my_contribution/
+/future_ai_validation/
