@@ -187,6 +187,17 @@ Unique constraint: `(intervention_id, travail_id)`. Index: `intervention_id`.
 
 ---
 
+### intervention_technicians (join table)
+| Column | Type | Notes |
+|---|---|---|
+| id | SERIAL PK | |
+| intervention_id | INT FK → interventions.id NOT NULL | |
+| user_id | INT FK → users.id NOT NULL | additional colleague technician participating alongside the lead (`interventions.technician_id`); the lead is never duplicated into this table |
+
+Unique constraint: `(intervention_id, user_id)`. Indexes: `intervention_id`, `user_id`.
+
+---
+
 ### attachments (Ch.44)
 | Column | Type | Notes |
 |---|---|---|
@@ -290,6 +301,7 @@ contracts 1──* interventions     (nullable FK)
 projects  1──* interventions     (nullable FK)
 
 interventions 1──* intervention_tasks *──1 travaux
+interventions 1──* intervention_technicians *──1 users (colleague technicians)
 interventions 1──* attachments
 interventions 1──* approval_history
 interventions 1──* audit_log

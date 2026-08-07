@@ -37,6 +37,8 @@ Validation error:
 | Method | Path | Roles | Description |
 |---|---|---|---|
 | GET | /users | A (C: read-only list of technicians) | paginated, search, filter by role/active |
+| GET | /users/technicians | T/C/A | lightweight technician id/name list — colleague-technician pickers |
+| GET | /users/chefs | C/A | lightweight chef id/name list |
 | GET | /users/{id} | A | |
 | POST | /users | A | create user, hash password |
 | PUT | /users/{id} | A | update profile/role |
@@ -55,6 +57,7 @@ Validation error:
 | POST | /clients | A | |
 | PUT | /clients/{id} | A | |
 | PATCH | /clients/{id}/deactivate | A | soft delete (Ch.50) |
+| PATCH | /clients/{id}/activate | A | reactivate |
 
 ---
 
@@ -64,9 +67,11 @@ Validation error:
 |---|---|---|---|
 | GET | /sites | T/C/A | all sites, filterable by city |
 | GET | /clients/{id}/sites | T/C/A | Rule 4 — cities filtered by selected client |
+| GET | /sites/{id} | T/C/A | |
 | POST | /sites | A | |
 | PUT | /sites/{id} | A | |
 | PATCH | /sites/{id}/deactivate | A | |
+| PATCH | /sites/{id}/activate | A | reactivate |
 
 ---
 
@@ -76,6 +81,7 @@ Validation error:
 |---|---|---|---|
 | GET | /contracts | T/C/A | filterable by client, status |
 | GET | /clients/{id}/contracts | T/C/A | for the Contract intervention-type dropdown |
+| GET | /contracts/{id} | T/C/A | |
 | POST | /contracts | A | |
 | PUT | /contracts/{id} | A | |
 | PATCH | /contracts/{id}/archive | A | |
@@ -88,6 +94,7 @@ Validation error:
 |---|---|---|---|
 | GET | /projects | T/C/A | filterable by client, status |
 | GET | /clients/{id}/projects | T/C/A | for the Project intervention-type dropdown |
+| GET | /projects/{id} | T/C/A | |
 | POST | /projects | A | |
 | PUT | /projects/{id} | A | |
 | PATCH | /projects/{id}/archive | A | |
@@ -99,9 +106,11 @@ Validation error:
 | Method | Path | Roles | Description |
 |---|---|---|---|
 | GET | /travaux | T/C/A | dropdown source, search by code/name |
+| GET | /travaux/{id} | T/C/A | |
 | POST | /travaux | A | |
 | PUT | /travaux/{id} | A | |
 | PATCH | /travaux/{id}/deactivate | A | |
+| PATCH | /travaux/{id}/activate | A | reactivate |
 
 ---
 
@@ -120,12 +129,9 @@ No DELETE endpoint exists — interventions are never deleted (Rule 9).
 
 ---
 
-## Intervention Tasks (Ch.43) — nested under interventions
+## Intervention Tasks (Ch.43)
 
-| Method | Path | Roles | Description |
-|---|---|---|---|
-| POST | /interventions/{id}/tasks | T (own, draft/rejected) | attach travail_id(s) |
-| DELETE | /interventions/{id}/tasks/{task_id} | T (own, draft/rejected) | remove a task line before submission |
+Travaux are not managed via separate task endpoints — `travail_ids: list[int]` is a plain field on the `POST /interventions` and `PUT /interventions/{id}` payloads (see above), replacing the intervention's full task list in one call rather than adding/removing lines individually.
 
 ---
 
@@ -140,15 +146,17 @@ No DELETE endpoint exists — interventions are never deleted (Rule 9).
 
 ---
 
-## Planning (Ch.83, Ch.45, Ch.63, Ch.142) — Chef des Techniciens only
+## Planning (Ch.83, Ch.45, Ch.63, Ch.142) — Chef des Techniciens and Admin Supervisor write, Technician reads own
 
 | Method | Path | Roles | Description |
 |---|---|---|---|
-| GET | /planning | C (all) / T (own, read-only) / A (read) | filterable by technician, date range, priority, status |
-| POST | /planning | C | create planned intervention; notifies assigned technician |
-| PUT | /planning/{id} | C | edit before technician starts (Ch.142) |
-| DELETE | /planning/{id} | C | cancel — soft: `status='cancelled'`, history retained, technician notified |
-| POST | /planning/{id}/urgent | C | Ch.64 — flag/create as urgent priority, immediate notification |
+| GET | /planning | C/A (all) / T (own, read-only) | filterable by technician, date range, priority, status |
+| GET | /planning/{id} | C/A (any) / T (own) | single planning entry detail |
+| POST | /planning | C/A | create planned intervention; notifies assigned technician |
+| PUT | /planning/{id} | C/A | edit before technician starts (Ch.142) |
+| DELETE | /planning/{id} | C/A | cancel — soft: `status='cancelled'`, history retained, technician notified |
+| POST | /planning/{id}/urgent | C/A | Ch.64 — flag/create as urgent priority, immediate notification |
+| PUT | /planning/urgent-queue/reorder | C/A | reorder the urgent queue's display order via a list of ordered planning ids |
 
 ---
 
@@ -156,6 +164,7 @@ No DELETE endpoint exists — interventions are never deleted (Rule 9).
 
 | Method | Path | Roles | Description |
 |---|---|---|---|
+| GET | /approvals/my-recent-decisions | C/A | the caller's own recent approve/reject decisions |
 | GET | /approvals/technical-pending | C | queue for Chef |
 | GET | /approvals/administrative-pending | A | queue for Admin Supervisor |
 | POST | /interventions/{id}/technical-approval | C | `{decision, comment}`; approved→status=pending_administrative_approval + notifies Admin; rejected→status=rejected + notifies technician; always writes approval_history + audit_log |
@@ -168,8 +177,11 @@ No DELETE endpoint exists — interventions are never deleted (Rule 9).
 | Method | Path | Roles | Description |
 |---|---|---|---|
 | GET | /dashboard/technician | T | own KPI cards, today's planning, recent notifications |
+| GET | /dashboard/technician/charts | T | `mode`/`anchor` query params select the chart period; weekly-completed + monthly-points chart series |
 | GET | /dashboard/supervisor | C | team KPIs, pending technical approvals, urgent queue, workload |
+| GET | /dashboard/supervisor/charts | C | `mode`/`anchor` query params; team chart series |
 | GET | /dashboard/admin | A | global KPIs, approval rates, charts data |
+| GET | /dashboard/admin/charts | A | `mode`/`anchor` query params; global chart series |
 
 All dashboard endpoints return pre-aggregated stats computed server-side (Ch.115) — never raw row dumps.
 
@@ -192,8 +204,18 @@ combination of filters is given.
 | GET | /reports/approval | C/A | Approval Report (Ch.47 approval_history, not filtered by the interventions table) |
 | GET | /reports/planning | C/A | Planning Report (Ch.45 planning, not filtered by the interventions table) |
 | GET | /reports/comparison | C/A | Ch.114 historical comparison — two independent date ranges (+ optional technician/client filter), returned side-by-side |
-| GET | /reports/export.pdf | C/A | same `report` (`interventions`\|`approval`\|`planning`) + filters as whichever report is currently open, streams PDF |
+| GET | /reports/export.pdf | C/A | same `report` (`interventions`\|`approval`\|`planning`) + filters as whichever report is currently open, streams PDF; `type` is additionally required (400 if omitted) when `report=interventions`, same values as `GET /reports/interventions` |
 | GET | /reports/export.xlsx | C/A | same as above, streams Excel |
+
+---
+
+## Technician Performance
+
+| Method | Path | Roles | Description |
+|---|---|---|---|
+| GET | /technician-performance | C/A | summary list, one row per technician (points/completion metrics) |
+| GET | /technician-performance/me | T | own performance detail — always the caller's own id, never a client-supplied one |
+| GET | /technician-performance/{technician_id} | C/A | performance detail for a specific technician |
 
 ---
 
@@ -226,7 +248,7 @@ Cities are not a top-level entity per Ch.38: they live as `client_sites.city`. "
 | /interventions (own) | RW | R (all) | R (all) |
 | /interventions/{id}/technical-approval | ✖ | ✔ | ✖ |
 | /interventions/{id}/administrative-approval | ✖ | ✖ | ✔ |
-| /planning | R (own) | RW (all) | R |
+| /planning | R (own) | RW (all) | RW (all) |
 | /users, /clients (write), /contracts (write), /projects (write), /travaux (write) | ✖ | ✖ | ✔ |
 | /dashboard/technician | ✔ | ✖ | ✖ |
 | /dashboard/supervisor | ✖ | ✔ | ✖ |
