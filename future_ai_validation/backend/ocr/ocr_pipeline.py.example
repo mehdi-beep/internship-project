@@ -1,0 +1,54 @@
+# PROTOTYPE / ILLUSTRATIVE ONLY — NOT REAL, EXECUTABLE CODE.
+# This file uses a .py.example extension specifically so Python's import system
+# cannot import it. It exists purely to illustrate the PROPOSED shape of the OCR
+# pipeline described in ../../SPECIFICATION.md, Section 5.
+#
+# Nothing in this file has been tested, installed, or run. Every library referenced
+# below is a PROPOSAL (see SPECIFICATION.md Section 12) — none are installed in this
+# project's environment.
+
+"""Proposed OCR pipeline for the future AI-assisted approval module.
+
+Illustrative only — see SPECIFICATION.md Section 5 for the full design rationale.
+"""
+
+from dataclasses import dataclass
+
+
+@dataclass
+class ExtractedField:
+    """One structured field extracted from a paper-BI photo."""
+    field_name: str          # e.g. "intervention_date", "client_name"
+    extracted_text: str
+    extraction_confidence: float  # 0.0-1.0, how confident the OCR step itself was
+
+
+def preprocess_image(raw_image_bytes: bytes):
+    """PROPOSED: deskew, denoise, and binarize the uploaded photo before OCR.
+
+    Would use opencv-python (proposed dependency, not installed).
+    """
+    raise NotImplementedError("Prototype only — see SPECIFICATION.md Section 5.")
+
+
+def detect_form_layout(preprocessed_image) -> dict:
+    """PROPOSED: locate the paper BI's known structured-field regions using a
+    fixed template, since the physical form's layout is consistent across every
+    photograph (Ch.44 of the specification — the paper BI's structure is fixed).
+    """
+    raise NotImplementedError("Prototype only — see SPECIFICATION.md Section 5.")
+
+
+def extract_fields(preprocessed_image, layout: dict) -> list[ExtractedField]:
+    """PROPOSED: run OCR (Tesseract or a cloud OCR API — see SPECIFICATION.md
+    Section 12) against each detected region, returning one ExtractedField per
+    known field on the form.
+    """
+    raise NotImplementedError("Prototype only — see SPECIFICATION.md Section 5.")
+
+
+def run_ocr_pipeline(raw_image_bytes: bytes) -> list[ExtractedField]:
+    """The proposed entry point tying the three steps above together."""
+    preprocessed = preprocess_image(raw_image_bytes)
+    layout = detect_form_layout(preprocessed)
+    return extract_fields(preprocessed, layout)

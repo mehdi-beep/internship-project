@@ -1,0 +1,72 @@
+# PROTOTYPE / ILLUSTRATIVE ONLY — NOT REAL, EXECUTABLE CODE.
+# See ../../ISOLATION.md — this file cannot be imported (.py.example extension) and
+# is not referenced anywhere in the real application.
+
+"""Proposed comparison engine for the future AI-assisted approval module.
+
+Illustrative only — see SPECIFICATION.md Section 7 and
+docs/confidence_scoring.md for the full design rationale.
+
+IMPORTANT (see SPECIFICATION.md Section 7, step 1): this engine is proposed to be
+READ-ONLY against the real BIMS API — it would call the existing, unmodified
+GET /api/interventions/{id} endpoint to fetch the digital form's actual stored
+values, never maintaining its own separate copy of application data. No such call
+is implemented here; this is a design sketch only.
+"""
+
+from dataclasses import dataclass
+from enum import Enum
+
+
+class FieldMatchState(str, Enum):
+    """The three states from docs/confidence_scoring.md — deliberately three, not two."""
+    CONFIDENT_MATCH = "confident_match"
+    CONFIDENT_MISMATCH = "confident_mismatch"
+    UNABLE_TO_ASSESS = "unable_to_assess"
+
+
+@dataclass
+class FieldComparisonResult:
+    field_name: str
+    digital_value: str        # from the real BIMS API (read-only)
+    extracted_value: str      # from the OCR pipeline
+    state: FieldMatchState
+    match_score: float        # 0.0-1.0
+
+
+# PROPOSED field weights — illustrative starting point only, see
+# docs/confidence_scoring.md's "Proposed field weights" table for the full
+# reasoning. NOT validated against real data (see that document's "Calibration"
+# section).
+PROPOSED_FIELD_WEIGHTS = {
+    "signature_present": 1.0,
+    "intervention_date": 0.9,
+    "client_name": 0.9,
+    "start_time": 0.6,
+    "end_time": 0.6,
+    "technician_name": 0.6,
+    "technical_report": 0.3,
+}
+
+
+def fetch_digital_form_values(intervention_id: int) -> dict:
+    """PROPOSED: a read-only call to the real, existing, unmodified
+    GET /api/interventions/{id} endpoint. Not implemented here — illustrative only.
+    """
+    raise NotImplementedError("Prototype only — see SPECIFICATION.md Section 7.")
+
+
+def fuzzy_match(extracted_text: str, stored_value: str) -> float:
+    """PROPOSED: fuzzy string comparison (e.g. via rapidfuzz — see
+    SPECIFICATION.md Section 12) rather than exact matching, since OCR
+    extraction from handwriting is inherently imperfect.
+    """
+    raise NotImplementedError("Prototype only — see SPECIFICATION.md Section 7.")
+
+
+def compare_fields(extracted_fields: list, digital_values: dict, vision_findings) -> list[FieldComparisonResult]:
+    """The proposed core comparison loop — aligns each OCR'd field against its
+    digital counterpart, and folds in the Vision pipeline's structural findings
+    (e.g. signature presence) as their own distinct comparison result.
+    """
+    raise NotImplementedError("Prototype only — see SPECIFICATION.md Section 7.")

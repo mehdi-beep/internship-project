@@ -1,0 +1,47 @@
+# PROTOTYPE / ILLUSTRATIVE ONLY — NOT REAL, EXECUTABLE CODE.
+# See ../../ISOLATION.md — this file cannot be imported (.py.example extension) and
+# is not referenced anywhere in the real application's app/schemas/ directory.
+
+"""Proposed request/response shapes for the future AI-assisted approval module.
+
+Illustrative only. Deliberately modeled after this project's real Pydantic schema
+style (see the real backend/app/schemas/ for the actual pattern) so it would be
+familiar to read, but this file itself defines nothing the real application uses.
+"""
+
+from enum import Enum
+
+from pydantic import BaseModel
+
+
+class SuggestedDecision(str, Enum):
+    """Deliberately never includes an automatic reject-suggestion state —
+    see docs/confidence_scoring.md's threshold table and its note on why."""
+    APPROVE = "approve"
+    REVIEW_CAREFULLY = "review_carefully"
+
+
+class FieldResultOut(BaseModel):
+    field_name: str
+    digital_value: str
+    extracted_value: str
+    state: str  # "confident_match" | "confident_mismatch" | "unable_to_assess"
+    match_score: float
+
+
+class AIReviewResultOut(BaseModel):
+    """The proposed final output shape — matches SPECIFICATION.md Section 8's
+    { confidence_score, field_results[], suggested_decision, explanation }."""
+    intervention_id: int
+    confidence_score: float
+    field_results: list[FieldResultOut]
+    suggested_decision: SuggestedDecision
+    explanation: str  # human-readable summary, see SPECIFICATION.md Section 9
+
+
+class AnalysisJobOut(BaseModel):
+    """Returned immediately by the proposed POST /ai-review/analyze/{id}
+    endpoint — analysis is expected to be too slow to run synchronously
+    (SPECIFICATION.md Section 10 / ROADMAP.md Phase 5)."""
+    job_id: str
+    status: str  # "pending" | "processing" | "complete" | "failed"
