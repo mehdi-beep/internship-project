@@ -3,14 +3,21 @@ from sqlalchemy.orm import Session
 
 from app.models.travail import Travail
 from app.repositories import travail_repository
+from app.services import deletion_service
 from app.schemas.pagination import Page
 from app.schemas.travail import TravailCreate, TravailUpdate
 from app.utils.pagination import paginate
 
 
-def list_travaux(db: Session, page: int, page_size: int, search: str | None, active_only: bool) -> Page:
-    stmt = travail_repository.list_query(search, active_only)
+def list_travaux(
+    db: Session, page: int, page_size: int, search: str | None, active_only: bool, category: str | None = None
+) -> Page:
+    stmt = travail_repository.list_query(search, active_only, category)
     return paginate(db, stmt, page, page_size)
+
+
+def list_categories(db: Session) -> list[str]:
+    return travail_repository.list_categories(db)
 
 
 def get_travail(db: Session, travail_id: int) -> Travail:
@@ -45,3 +52,13 @@ def deactivate_travail(db: Session, travail_id: int) -> Travail:
 def activate_travail(db: Session, travail_id: int) -> Travail:
     travail = get_travail(db, travail_id)
     return travail_repository.set_active(db, travail, True)
+
+
+def delete_travail_permanently(db: Session, travail_id: int) -> None:
+    """Task 5 — permanent hard delete. Any referencing rows (interventions,
+    planning, etc.) are DETACHED, not deleted: they keep all their own data
+    and simply lose the link to this record. See deletion_service."""
+    travail = get_travail(db, travail_id)
+    deletion_service.ensure_deletable(db, "travail", travail_id)
+    deletion_service.detach_references(db, "travail", travail_id)
+    travail_repository.delete(db, travail)

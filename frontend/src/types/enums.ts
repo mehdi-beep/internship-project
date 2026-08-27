@@ -1,4 +1,4 @@
-export type UserRole = "technician" | "chef_technicien" | "admin_supervisor";
+export type UserRole = "technician" | "chef_technicien" | "admin_supervisor" | "display";
 
 export type InterventionStatus =
   | "draft"

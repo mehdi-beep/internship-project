@@ -7,6 +7,16 @@ body,
 #root {
   margin: 0;
   min-height: 100vh;
+  /* height: 100% (not just min-height: 100vh) so any descendant using
+     height: "100%" (e.g. DisplayCalendarPage.tsx's full-screen layout) has a
+     real, explicit height to resolve against — CSS percentage heights only
+     work through an unbroken chain of ancestors that themselves have an
+     explicit height, and min-height alone doesn't establish that chain.
+     Every other page in this app never needed this because AppLayout.tsx
+     sizes its content area with flexGrow/percentage-of-parent, not raw
+     viewport units, so this gap was invisible until DisplayCalendarPage
+     became the first page rendered outside that layout. */
+  height: 100%;
 }
 
 body {

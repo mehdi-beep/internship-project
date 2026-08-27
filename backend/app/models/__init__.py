@@ -5,6 +5,7 @@ from app.models.client_site import ClientSite
 from app.models.contract import Contract
 from app.models.project import Project
 from app.models.travail import Travail
+from app.models.point_rule import PointRule
 from app.models.intervention import Intervention
 from app.models.intervention_task import InterventionTask
 from app.models.intervention_technician import InterventionTechnician
@@ -22,6 +23,7 @@ __all__ = [
     "Contract",
     "Project",
     "Travail",
+    "PointRule",
     "Intervention",
     "InterventionTask",
     "InterventionTechnician",

@@ -12,7 +12,7 @@ from app.models.role import RoleName
 from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.schemas.pagination import Page
-from app.schemas.planning import PlanningCreate, PlanningOut, PlanningUpdate
+from app.schemas.planning import PlanningCreate, PlanningDisplayOut, PlanningOut, PlanningUpdate
 from app.services import planning_service
 
 router = APIRouter(prefix="/planning", tags=["planning"])
@@ -32,6 +32,24 @@ def reorder_urgent_queue(
 ) -> ApiResponse[None]:
     planning_service.reorder_urgent_queue(db, payload.ordered_ids)
     return ApiResponse(message="Urgent queue reordered.")
+
+
+@router.get("/display", response_model=ApiResponse[list[PlanningDisplayOut]])
+def list_planning_for_display(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db: Session = Depends(get_db),
+    # Task 3 — this is the display role's ONLY reachable endpoint anywhere in
+    # the API, deliberately not part of the shared ALL_ROLES tuple above.
+    # chef_technicien/admin_supervisor are also allowed here (harmlessly —
+    # they already see this exact data through /planning + separate
+    # /clients and /users lookups); technician is intentionally excluded, since
+    # their existing calendar is scoped to their own planning only (Ch.16)
+    # and this global, all-technicians view would bypass that scoping.
+    _: User = Depends(require_roles("display", "chef_technicien", "admin_supervisor")),
+) -> ApiResponse[list[PlanningDisplayOut]]:
+    rows = planning_service.list_planning_for_display(db, date_from, date_to)
+    return ApiResponse(data=rows)
 
 
 @router.get("", response_model=ApiResponse[Page[PlanningOut]])

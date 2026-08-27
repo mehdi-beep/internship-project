@@ -1,5 +1,6 @@
-import { fetchPage, fetchOne, postOne, putOne, patchOne } from "../api/queryHelpers";
+import { fetchPage, fetchOne, postOne, putOne, patchOne, deleteOne } from "../api/queryHelpers";
 import type { Project, ProjectStatus } from "../types/referenceData";
+import type { DeletionCheck } from "../types/deletion";
 
 export interface ProjectListParams {
   page?: number;
@@ -7,6 +8,8 @@ export interface ProjectListParams {
   client_id?: number;
   status?: ProjectStatus;
   search?: string;
+  start_date_from?: string;
+  start_date_to?: string;
 }
 
 export interface ProjectInput {
@@ -22,3 +25,8 @@ export const createProject = (input: ProjectInput) => postOne<Project>("/project
 export const updateProject = (id: number, input: Omit<ProjectInput, "client_id">) =>
   putOne<Project>(`/projects/${id}`, input);
 export const archiveProject = (id: number) => patchOne<Project>(`/projects/${id}/archive`);
+
+// --- Task 5: permanent deletion (Administrator only) ---
+export const checkProjectDeletable = (id: number) =>
+  fetchOne<DeletionCheck>(`/projects/${id}/deletion-check`);
+export const deleteProjectPermanently = (id: number) => deleteOne(`/projects/${id}`);

@@ -7,7 +7,7 @@ from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.schemas.pagination import Page
 from app.schemas.travail import TravailCreate, TravailOut, TravailUpdate
-from app.services import travail_service
+from app.services import deletion_service, travail_service
 
 router = APIRouter(prefix="/travaux", tags=["travaux"])
 
@@ -20,10 +20,11 @@ def list_travaux(
     page_size: int = Query(20, ge=1, le=100),
     search: str | None = None,
     active_only: bool = True,
+    category: str | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(*ALL_ROLES)),
 ) -> ApiResponse[Page[TravailOut]]:
-    result = travail_service.list_travaux(db, page, page_size, search, active_only)
+    result = travail_service.list_travaux(db, page, page_size, search, active_only, category)
     return ApiResponse(
         data=Page(
             items=[TravailOut.model_validate(t) for t in result.items],
@@ -33,6 +34,14 @@ def list_travaux(
             pages=result.pages,
         )
     )
+
+
+@router.get("/categories", response_model=ApiResponse[list[str]])
+def list_travaux_categories(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*ALL_ROLES)),
+) -> ApiResponse[list[str]]:
+    return ApiResponse(data=travail_service.list_categories(db))
 
 
 @router.get("/{travail_id}", response_model=ApiResponse[TravailOut])
@@ -84,3 +93,32 @@ def activate_travail(
 ) -> ApiResponse[TravailOut]:
     travail = travail_service.activate_travail(db, travail_id)
     return ApiResponse(message="Travail reactivated.", data=TravailOut.model_validate(travail))
+
+
+@router.get("/{travail_id}/deletion-check", response_model=ApiResponse[dict])
+def check_travail_deletable(
+    travail_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin_supervisor")),
+) -> ApiResponse[dict]:
+    """Task 5 — lets the UI warn the Administrator *before* they confirm a
+    permanent deletion, instead of only failing afterwards."""
+    blockers = deletion_service.check_deletable(db, "travail", travail_id)
+    return ApiResponse(
+        data={
+            "deletable": deletion_service.is_deletable("travail", blockers),
+            "blockers": [{"label": b.label, "count": b.count} for b in blockers],
+        }
+    )
+
+
+@router.delete("/{travail_id}", response_model=ApiResponse[None])
+def delete_travail_permanently(
+    travail_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin_supervisor")),
+) -> ApiResponse[None]:
+    """Task 5 — PERMANENT hard delete (admin only). Refused with 409 if any
+    record still references this row; historical data is never cascaded."""
+    travail_service.delete_travail_permanently(db, travail_id)
+    return ApiResponse(message="Travail permanently deleted.", data=None)

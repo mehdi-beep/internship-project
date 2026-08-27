@@ -17,6 +17,7 @@ from app.api import (
     interventions,
     notifications,
     planning,
+    point_rules,
     projects,
     reports,
     sites,
@@ -76,6 +77,7 @@ app.include_router(sites.router, prefix="/api")
 app.include_router(contracts.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(travaux.router, prefix="/api")
+app.include_router(point_rules.router, prefix="/api")
 app.include_router(planning.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(interventions.router, prefix="/api")

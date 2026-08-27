@@ -41,6 +41,10 @@ def list_interventions(
     date_to: date | None = None,
     search: str | None = None,
     colleague_technician_id: int | None = None,
+    city: str | None = None,
+    contract_id: int | None = None,
+    project_id: int | None = None,
+    status_in: list[InterventionStatus] | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*ALL_ROLES)),
 ) -> ApiResponse[Page[InterventionOut]]:
@@ -59,6 +63,10 @@ def list_interventions(
         date_to,
         search,
         colleague_technician_id,
+        city,
+        contract_id,
+        project_id,
+        status_in,
     )
     return ApiResponse(
         data=Page(

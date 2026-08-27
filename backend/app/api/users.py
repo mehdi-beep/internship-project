@@ -8,7 +8,7 @@ from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.schemas.pagination import Page
 from app.schemas.user import PasswordReset, TechnicianOptionOut, UserCreate, UserOut, UserUpdate
-from app.services import user_service
+from app.services import deletion_service, user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -127,3 +127,32 @@ def reset_password(
 ) -> ApiResponse[UserOut]:
     user = user_service.reset_password(db, user_id, payload)
     return ApiResponse(message="Password reset.", data=UserOut.from_model(user))
+
+
+@router.get("/{user_id}/deletion-check", response_model=ApiResponse[dict])
+def check_user_deletable(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin_supervisor")),
+) -> ApiResponse[dict]:
+    """Task 5 — lets the UI warn the Administrator *before* they confirm a
+    permanent deletion, instead of only failing afterwards."""
+    blockers = deletion_service.check_deletable(db, "user", user_id)
+    return ApiResponse(
+        data={
+            "deletable": deletion_service.is_deletable("user", blockers),
+            "blockers": [{"label": b.label, "count": b.count} for b in blockers],
+        }
+    )
+
+
+@router.delete("/{user_id}", response_model=ApiResponse[None])
+def delete_user_permanently(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin_supervisor")),
+) -> ApiResponse[None]:
+    """Task 5 — PERMANENT hard delete (admin only). Refused with 409 if any
+    record still references this row; historical data is never cascaded."""
+    user_service.delete_user_permanently(db, user_id)
+    return ApiResponse(message="User permanently deleted.", data=None)

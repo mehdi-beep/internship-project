@@ -7,6 +7,8 @@ const PLANNING_TITLES = new Set([
   "Urgent Intervention Assigned",
   "Planning Modified",
   "Planning Cancelled",
+  // Task 4 — sent to the previously-assigned technician on reassignment.
+  "Assignment Removed",
 ]);
 
 const INTERVENTION_TITLES = new Set([
@@ -38,6 +40,13 @@ const INTERVENTION_TITLES = new Set([
  */
 export async function resolveNotificationPath(notification: Notification, role: UserRole): Promise<string | null> {
   if (PLANNING_TITLES.has(notification.title)) {
+    // "Assignment Removed" tells a technician the work is no longer theirs —
+    // deep-linking them into starting that intervention would be actively
+    // wrong, and GET /planning/{id} would 403 for them now anyway. Their own
+    // list is the only sensible destination.
+    if (notification.title === "Assignment Removed") {
+      return role === "technician" ? "/interventions" : "/planning";
+    }
     if (role === "chef_technicien" || role === "admin_supervisor") {
       return notification.related_planning_id != null
         ? `/planning?highlight=${notification.related_planning_id}`

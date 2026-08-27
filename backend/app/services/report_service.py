@@ -120,7 +120,15 @@ def generate_intervention_report(
         InterventionReportRow(
             bi_number=i.bi_number,
             intervention_date=i.intervention_date,
-            technician_name=technicians[i.technician_id].full_name if i.technician_id in technicians else f"#{i.technician_id}",
+            # i.deleted_user_label is only ever populated once the lead
+            # technician has been permanently deleted (frozen at deletion
+            # time — see deletion_service.py) — preferred over the generic
+            # id fallback the way approver_name already is elsewhere.
+            technician_name=(
+                technicians[i.technician_id].full_name
+                if i.technician_id in technicians
+                else (i.deleted_user_label or f"#{i.technician_id}")
+            ),
             client_name=clients[i.client_id].client_name if i.client_id in clients else f"#{i.client_id}",
             site_name=sites[i.site_id].site_name if i.site_id in sites else f"#{i.site_id}",
             intervention_type=i.intervention_type.value,
@@ -197,7 +205,14 @@ def generate_planning_report(db: Session, date_from: date | None, date_to: date 
 
     rows = [
         PlanningReportRow(
-            technician_name=technicians[e.technician_id].full_name if e.technician_id in technicians else f"#{e.technician_id}",
+            # e.deleted_technician_label is only ever populated once this
+            # planning entry's assigned technician has been permanently
+            # deleted (frozen at deletion time — see deletion_service.py).
+            technician_name=(
+                technicians[e.technician_id].full_name
+                if e.technician_id in technicians
+                else (e.deleted_technician_label or f"#{e.technician_id}")
+            ),
             client_name=clients[e.client_id].client_name if e.client_id in clients else f"#{e.client_id}",
             site_name=sites[e.site_id].site_name if e.site_id in sites else f"#{e.site_id}",
             planned_date=e.planned_date,

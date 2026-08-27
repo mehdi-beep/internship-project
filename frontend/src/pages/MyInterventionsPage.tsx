@@ -10,10 +10,14 @@ import StatusBadge from "../components/StatusBadge";
 import GenericCalendar, { type GenericCalendarEvent } from "../components/GenericCalendar";
 import ViewModeToggle, { type ViewMode } from "../components/ViewModeToggle";
 import { listClients } from "../services/clientService";
+import { listContracts } from "../services/contractService";
 import { listInterventions } from "../services/interventionService";
+import { listProjects } from "../services/projectService";
+import { listSiteCities } from "../services/siteService";
+import { listTechnicianOptions } from "../services/userService";
 import { useAuth } from "../context/AuthContext";
 import { interventionEventColor } from "../utils/interventionColors";
-import type { InterventionStatus } from "../types/enums";
+import type { InterventionStatus, InterventionType } from "../types/enums";
 import type { Intervention } from "../types/intervention";
 
 // Ch.58 tabs. "Planned" maps to the planned lifecycle state; the remaining tabs
@@ -27,6 +31,13 @@ const TABS: { label: string; statuses: InterventionStatus[] }[] = [
   { label: "Approved", statuses: ["fully_approved"] },
 ];
 
+const TYPE_LABELS: Record<InterventionType, string> = {
+  standard: "Standard",
+  contract: "Contract",
+  project: "Project",
+  warranty: "Warranty",
+};
+
 export default function MyInterventionsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -38,26 +49,71 @@ export default function MyInterventionsPage() {
   const [pageSize, setPageSize] = useState(20);
   const [search, setSearch] = useState("");
   const [clientFilter, setClientFilter] = useState<number | "">("");
+  const [technicianFilter, setTechnicianFilter] = useState<number | "">("");
+  const [cityFilter, setCityFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState<InterventionType | "">("");
+  const [contractFilter, setContractFilter] = useState<number | "">("");
+  const [projectFilter, setProjectFilter] = useState<number | "">("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [assistedOnly, setAssistedOnly] = useState(false);
 
+  // The Technician filter only makes sense for Chef/Admin viewing everyone's
+  // interventions — a technician's own list is already scoped to themselves
+  // server-side (Ch.16), so narrowing "by technician" is meaningless there
+  // (there's only ever one). Contract/Project, by contrast, apply to every
+  // role: GET /contracts and GET /projects are T/C/A read endpoints (Rule 3
+  // pattern), and a technician can create contract-/project-type interventions
+  // themselves (InterventionFormPage), so filtering their own list down to
+  // "just Contract X" is a legitimate narrowing of data they already see —
+  // not a permission escalation — and stays available to every role.
+  const isPrivilegedViewer = !isTechnician;
+
   const activeTab = TABS[tabIndex];
-  // The API filters one status at a time; multi-status tabs are filtered client-side
-  // over the fetched page, so a single-status tab stays server-filtered and exact.
+  // Both branches are server-side filters now — a single-status tab uses
+  // `status`, a multi-status tab (e.g. "Submitted", which spans 4 lifecycle
+  // statuses) uses `status_in`. Previously the multi-status case was
+  // filtered client-side over an already-paginated page, which made the
+  // visible row count and the pagination total disagree (a page could show
+  // "1 of 20" while rendering only 1-3 rows, since most of that raw page
+  // didn't belong to the group) — this was a real, reported pagination bug.
   const serverStatus = activeTab.statuses.length === 1 ? activeTab.statuses[0] : undefined;
+  const serverStatusIn = activeTab.statuses.length > 1 ? activeTab.statuses : undefined;
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["interventions", page, pageSize, search, clientFilter, dateFrom, dateTo, serverStatus, assistedOnly, user?.id],
+    queryKey: [
+      "interventions",
+      page,
+      pageSize,
+      search,
+      clientFilter,
+      technicianFilter,
+      cityFilter,
+      typeFilter,
+      contractFilter,
+      projectFilter,
+      dateFrom,
+      dateTo,
+      serverStatus,
+      serverStatusIn,
+      assistedOnly,
+      user?.id,
+    ],
     queryFn: () =>
       listInterventions({
         page,
         page_size: pageSize,
         search: search || undefined,
         client_id: clientFilter || undefined,
+        technician_id: isPrivilegedViewer ? technicianFilter || undefined : undefined,
+        city: cityFilter || undefined,
+        intervention_type: typeFilter || undefined,
+        contract_id: contractFilter || undefined,
+        project_id: projectFilter || undefined,
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
         status: serverStatus,
+        status_in: serverStatusIn,
         colleague_technician_id: assistedOnly && isTechnician ? user?.id : undefined,
       }),
   });
@@ -75,16 +131,37 @@ export default function MyInterventionsPage() {
     date_to: dayjs().endOf("month").add(1, "month").format("YYYY-MM-DD"),
   }));
   const { data: calendarData } = useQuery({
-    queryKey: ["interventions", "calendar", calendarRange, search, clientFilter, serverStatus, assistedOnly, user?.id],
+    queryKey: [
+      "interventions",
+      "calendar",
+      calendarRange,
+      search,
+      clientFilter,
+      technicianFilter,
+      cityFilter,
+      typeFilter,
+      contractFilter,
+      projectFilter,
+      serverStatus,
+      serverStatusIn,
+      assistedOnly,
+      user?.id,
+    ],
     queryFn: () =>
       listInterventions({
         page: 1,
         page_size: 100,
         search: search || undefined,
         client_id: clientFilter || undefined,
+        technician_id: isPrivilegedViewer ? technicianFilter || undefined : undefined,
+        city: cityFilter || undefined,
+        intervention_type: typeFilter || undefined,
+        contract_id: contractFilter || undefined,
+        project_id: projectFilter || undefined,
         date_from: dateFrom || calendarRange.date_from,
         date_to: dateTo || calendarRange.date_to,
         status: serverStatus,
+        status_in: serverStatusIn,
         colleague_technician_id: assistedOnly && isTechnician ? user?.id : undefined,
       }),
     enabled: viewMode === "calendar",
@@ -96,24 +173,43 @@ export default function MyInterventionsPage() {
   });
   const clientNameById = new Map((clientsData?.items ?? []).map((c) => [c.id, c.client_name]));
 
-  const rows = (data?.items ?? []).filter((i) =>
-    activeTab.statuses.length <= 1 ? true : activeTab.statuses.includes(i.status),
-  );
+  const { data: technicianOptions } = useQuery({
+    queryKey: ["users", "technician-options"],
+    queryFn: listTechnicianOptions,
+    enabled: isPrivilegedViewer,
+  });
 
-  const calendarRows = (calendarData?.items ?? []).filter((i) =>
-    activeTab.statuses.length <= 1 ? true : activeTab.statuses.includes(i.status),
-  );
+  const { data: cities } = useQuery({
+    queryKey: ["sites", "cities"],
+    queryFn: listSiteCities,
+  });
+
+  const { data: contractsData } = useQuery({
+    queryKey: ["contracts", "lookup-all"],
+    queryFn: () => listContracts({ page_size: 100 }),
+  });
+
+  const { data: projectsData } = useQuery({
+    queryKey: ["projects", "lookup-all"],
+    queryFn: () => listProjects({ page_size: 100 }),
+  });
+
+  // No client-side re-filtering by tab anymore — status/status_in above
+  // already ask the server for exactly the rows this tab should show, so
+  // `data.items`/`data.total` and what's actually rendered always agree.
+  const rows = data?.items ?? [];
+  const calendarRows = calendarData?.items ?? [];
   const calendarEvents: GenericCalendarEvent[] = calendarRows.map((i) => ({
     id: i.id,
     date: i.intervention_date,
-    title: `${i.bi_number} — ${clientNameById.get(i.client_id) ?? "Client"}`,
+    title: `${i.bi_number} — ${(i.client_id != null ? clientNameById.get(i.client_id) : undefined) ?? "Client"}`,
     color: interventionEventColor(i.status),
     onClick: () => navigate(`/interventions/${i.id}`),
   }));
 
   const columns: DataTableColumn<Intervention>[] = [
     { key: "bi", label: "BI Number", render: (i) => i.bi_number },
-    { key: "client", label: "Client", render: (i) => clientNameById.get(i.client_id) ?? `#${i.client_id}` },
+    { key: "client", label: "Client", render: (i) => (i.client_id != null ? clientNameById.get(i.client_id) : undefined) ?? `#${i.client_id}` },
     { key: "date", label: "Date", render: (i) => dayjs(i.intervention_date).format("MMM D, YYYY") },
     { key: "type", label: "Type", render: (i) => i.intervention_type },
     { key: "status", label: "Status", render: (i) => <StatusBadge status={i.status} /> },
@@ -167,7 +263,7 @@ export default function MyInterventionsPage() {
             setSearch(v);
             setPage(1);
           }}
-          placeholder="Search by BI number..."
+          placeholder="Search by BI number, client, or site..."
         />
         <TextField
           select
@@ -184,6 +280,98 @@ export default function MyInterventionsPage() {
           {(clientsData?.items ?? []).map((c) => (
             <MenuItem key={c.id} value={c.id}>
               {c.client_name}
+            </MenuItem>
+          ))}
+        </TextField>
+        {isPrivilegedViewer && (
+          <TextField
+            select
+            size="small"
+            label="Technician"
+            value={technicianFilter}
+            onChange={(e) => {
+              setTechnicianFilter(e.target.value ? Number(e.target.value) : "");
+              setPage(1);
+            }}
+            sx={{ minWidth: 180 }}
+          >
+            <MenuItem value="">All</MenuItem>
+            {(technicianOptions ?? []).map((t) => (
+              <MenuItem key={t.id} value={t.id}>
+                {t.first_name} {t.last_name}
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
+        <TextField
+          select
+          size="small"
+          label="City"
+          value={cityFilter}
+          onChange={(e) => {
+            setCityFilter(e.target.value);
+            setPage(1);
+          }}
+          sx={{ minWidth: 160 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          {(cities ?? []).map((city) => (
+            <MenuItem key={city} value={city}>
+              {city}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Type"
+          value={typeFilter}
+          onChange={(e) => {
+            setTypeFilter(e.target.value as InterventionType | "");
+            setPage(1);
+          }}
+          sx={{ minWidth: 150 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          {Object.entries(TYPE_LABELS).map(([value, label]) => (
+            <MenuItem key={value} value={value}>
+              {label}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Contract"
+          value={contractFilter}
+          onChange={(e) => {
+            setContractFilter(e.target.value ? Number(e.target.value) : "");
+            setPage(1);
+          }}
+          sx={{ minWidth: 180 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          {(contractsData?.items ?? []).map((c) => (
+            <MenuItem key={c.id} value={c.id}>
+              {c.contract_name}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Project"
+          value={projectFilter}
+          onChange={(e) => {
+            setProjectFilter(e.target.value ? Number(e.target.value) : "");
+            setPage(1);
+          }}
+          sx={{ minWidth: 180 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          {(projectsData?.items ?? []).map((p) => (
+            <MenuItem key={p.id} value={p.id}>
+              {p.project_name}
             </MenuItem>
           ))}
         </TextField>

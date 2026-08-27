@@ -16,7 +16,7 @@ database_pkg.engine = test_engine
 database_pkg.SessionLocal = TestSessionLocal
 
 from app.models import (
-    role, user, client, client_site, contract, project, travail,
+    role, user, client, client_site, contract, project, travail, point_rule,
     intervention, intervention_task, intervention_technician, attachment, planning, notification,
     approval_history, audit_log,
 )  # noqa

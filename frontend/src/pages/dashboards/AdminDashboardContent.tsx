@@ -3,8 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { Grid, Stack } from "@mui/material";
 import StatTile from "../../components/StatTile";
-import ChartCard from "../../components/ChartCard";
-import SimpleBarChart from "../../components/SimpleBarChart";
+import SwitchableChartCard from "../../components/SwitchableChartCard";
 import QueryStateGate from "../../components/QueryStateGate";
 import PeriodModeSelector, { type PeriodMode } from "../../components/PeriodModeSelector";
 import { getAdminDashboard, getAdminDashboardCharts } from "../../services/dashboardService";
@@ -63,24 +62,20 @@ function AdminDashboardBody({ data }: { data: AdminDashboard }) {
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
-          <ChartCard title="Interventions">
-            <SimpleBarChart data={charts?.interventions_chart ?? []} colorIndex={0} />
-          </ChartCard>
+          <SwitchableChartCard title="Interventions" data={charts?.interventions_chart ?? []} colorIndex={0} />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <ChartCard title="Points Distribution">
-            <SimpleBarChart data={charts?.points_distribution_chart ?? []} colorIndex={3} />
-          </ChartCard>
+          <SwitchableChartCard
+            title="Points Distribution"
+            data={charts?.points_distribution_chart ?? []}
+            colorIndex={3}
+          />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <ChartCard title="Client Activity">
-            <SimpleBarChart data={charts?.client_activity_chart ?? []} colorIndex={2} />
-          </ChartCard>
+          <SwitchableChartCard title="Client Activity" data={charts?.client_activity_chart ?? []} colorIndex={2} />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <ChartCard title="City Activity">
-            <SimpleBarChart data={charts?.city_activity_chart ?? []} colorIndex={6} />
-          </ChartCard>
+          <SwitchableChartCard title="City Activity" data={charts?.city_activity_chart ?? []} colorIndex={6} />
         </Grid>
       </Grid>
     </Stack>

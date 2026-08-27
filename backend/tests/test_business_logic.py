@@ -37,34 +37,59 @@ class TestDurationCalculation:
 
 
 class TestPointSystem:
-    """Ch.28 — every boundary hour, evaluated in Africa/Casablanca local time (not UTC)."""
+    """Ch.28 / Task 2 — every boundary hour, evaluated in Africa/Casablanca
+    local time (not UTC), against the seeded DEFAULT_POINT_RULES (which
+    reproduce the original hardcoded spec exactly). `calculate_points` now
+    reads `point_rules` from the database, so these need a real session —
+    `client` guarantees one seeded and importable via a fresh SessionLocal."""
 
-    def test_five_points_window(self):
+    def _session(self):
+        from app.database.session import SessionLocal
+
+        return SessionLocal()
+
+    def test_five_points_window(self, client):
         from app.services.business_logic_service import calculate_points
 
-        assert calculate_points(at_casablanca_hour(17, 0)) == 5
-        assert calculate_points(at_casablanca_hour(18, 59)) == 5
+        db = self._session()
+        try:
+            assert calculate_points(db, at_casablanca_hour(17, 0)) == 5
+            assert calculate_points(db, at_casablanca_hour(18, 59)) == 5
+        finally:
+            db.close()
 
-    def test_two_points_window(self):
+    def test_two_points_window(self, client):
         from app.services.business_logic_service import calculate_points
 
-        assert calculate_points(at_casablanca_hour(19, 0)) == 2
-        assert calculate_points(at_casablanca_hour(21, 59)) == 2
+        db = self._session()
+        try:
+            assert calculate_points(db, at_casablanca_hour(19, 0)) == 2
+            assert calculate_points(db, at_casablanca_hour(21, 59)) == 2
+        finally:
+            db.close()
 
-    def test_one_point_window(self):
+    def test_one_point_window(self, client):
         from app.services.business_logic_service import calculate_points
 
-        assert calculate_points(at_casablanca_hour(22, 0)) == 1
-        assert calculate_points(at_casablanca_hour(23, 59)) == 1
+        db = self._session()
+        try:
+            assert calculate_points(db, at_casablanca_hour(22, 0)) == 1
+            assert calculate_points(db, at_casablanca_hour(23, 59)) == 1
+        finally:
+            db.close()
 
-    def test_flat_penalty_outside_the_three_positive_windows(self):
+    def test_flat_penalty_outside_the_three_positive_windows(self, client):
         from app.services.business_logic_service import calculate_points
 
-        assert calculate_points(at_casablanca_hour(0, 0)) == -1
-        assert calculate_points(at_casablanca_hour(5, 59)) == -1
-        assert calculate_points(at_casablanca_hour(6, 0)) == -1
-        assert calculate_points(at_casablanca_hour(12, 0)) == -1
-        assert calculate_points(at_casablanca_hour(16, 59)) == -1
+        db = self._session()
+        try:
+            assert calculate_points(db, at_casablanca_hour(0, 0)) == -1
+            assert calculate_points(db, at_casablanca_hour(5, 59)) == -1
+            assert calculate_points(db, at_casablanca_hour(6, 0)) == -1
+            assert calculate_points(db, at_casablanca_hour(12, 0)) == -1
+            assert calculate_points(db, at_casablanca_hour(16, 59)) == -1
+        finally:
+            db.close()
 
 
 class TestStatusTransitionStateMachine:

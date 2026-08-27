@@ -5,6 +5,7 @@ from app.authentication.password import hash_password
 from app.models.role import RoleName
 from app.models.user import User
 from app.repositories import role_repository, user_repository
+from app.services import deletion_service
 from app.schemas.pagination import Page
 from app.schemas.user import PasswordReset, UserCreate, UserUpdate
 from app.utils.pagination import paginate
@@ -95,3 +96,15 @@ def deactivate_user(db: Session, user_id: int) -> User:
 def reset_password(db: Session, user_id: int, payload: PasswordReset) -> User:
     user = get_user(db, user_id)
     return user_repository.set_password(db, user, hash_password(payload.new_password))
+
+
+def delete_user_permanently(db: Session, user_id: int) -> None:
+    """Task 5 — permanent hard delete. Any recorded history (approvals,
+    audit-log entries, uploads, interventions, planning entries) is DETACHED,
+    not deleted: those rows keep all their own data and simply freeze this
+    user's name into a plain text label in place of the live link. See
+    deletion_service.detach_references."""
+    user = get_user(db, user_id)
+    deletion_service.ensure_deletable(db, "user", user_id)
+    deletion_service.detach_references(db, "user", user_id)
+    user_repository.delete(db, user)

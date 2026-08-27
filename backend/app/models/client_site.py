@@ -13,7 +13,10 @@ class ClientSite(Base):
     __tablename__ = "client_sites"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id"), nullable=False, index=True)
+    # Nullable (Task 5): a client may be permanently deleted; its sites are
+    # detached rather than deleted, so the site record and any interventions
+    # performed there survive intact.
+    client_id: Mapped[int | None] = mapped_column(ForeignKey("clients.id"), nullable=True, index=True)
     site_name: Mapped[str] = mapped_column(String(200), nullable=False)
     city: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     address: Mapped[str | None] = mapped_column(String(300), nullable=True)

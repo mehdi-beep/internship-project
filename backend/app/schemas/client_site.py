@@ -20,7 +20,9 @@ class ClientSiteOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    client_id: int
+    # Task 5: nullable because permanently deleting a Client detaches (does
+    # not delete) its sites — the site survives with client_id set to null.
+    client_id: int | None
     site_name: str
     city: str
     address: str | None

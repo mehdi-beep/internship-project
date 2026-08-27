@@ -7,7 +7,7 @@ from app.models.user import User
 from app.schemas.client_site import ClientSiteCreate, ClientSiteOut, ClientSiteUpdate
 from app.schemas.common import ApiResponse
 from app.schemas.pagination import Page
-from app.services import client_site_service
+from app.services import deletion_service, client_site_service
 
 router = APIRouter(tags=["client-sites"])
 
@@ -49,6 +49,14 @@ def list_sites_for_client(
 ) -> ApiResponse[Page[ClientSiteOut]]:
     result = client_site_service.list_sites(db, page, page_size, client_id, None, None, True)
     return ApiResponse(data=_to_page(result))
+
+
+@router.get("/sites/cities", response_model=ApiResponse[list[str]])
+def list_site_cities(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*ALL_ROLES)),
+) -> ApiResponse[list[str]]:
+    return ApiResponse(data=client_site_service.list_cities(db))
 
 
 @router.get("/sites/{site_id}", response_model=ApiResponse[ClientSiteOut])
@@ -100,3 +108,32 @@ def activate_site(
 ) -> ApiResponse[ClientSiteOut]:
     site = client_site_service.activate_site(db, site_id)
     return ApiResponse(message="Client site reactivated.", data=ClientSiteOut.model_validate(site))
+
+
+@router.get("/sites/{site_id}/deletion-check", response_model=ApiResponse[dict])
+def check_client_site_deletable(
+    site_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin_supervisor")),
+) -> ApiResponse[dict]:
+    """Task 5 — lets the UI warn the Administrator *before* they confirm a
+    permanent deletion, instead of only failing afterwards."""
+    blockers = deletion_service.check_deletable(db, "client_site", site_id)
+    return ApiResponse(
+        data={
+            "deletable": deletion_service.is_deletable("client_site", blockers),
+            "blockers": [{"label": b.label, "count": b.count} for b in blockers],
+        }
+    )
+
+
+@router.delete("/sites/{site_id}", response_model=ApiResponse[None])
+def delete_client_site_permanently(
+    site_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin_supervisor")),
+) -> ApiResponse[None]:
+    """Task 5 — PERMANENT hard delete (admin only). Refused with 409 if any
+    record still references this row; historical data is never cascaded."""
+    client_site_service.delete_client_site_permanently(db, site_id)
+    return ApiResponse(message="Client site permanently deleted.", data=None)

@@ -140,8 +140,12 @@ export default function InterventionFormPage() {
   useEffect(() => {
     if (!existing) return;
     reset({
-      client_id: existing.client_id,
-      site_id: existing.site_id,
+      // A permanently deleted client/site can never appear in the live
+      // dropdowns below — 0 is a safe placeholder that the form's own
+      // required-field validation will correctly reject until a real
+      // selection is made, same reasoning as PlanningPage.tsx's openEdit.
+      client_id: existing.client_id ?? 0,
+      site_id: existing.site_id ?? 0,
       contact_person: existing.contact_person ?? "",
       intervention_type: existing.intervention_type,
       contract_id: existing.contract_id ?? "",

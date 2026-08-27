@@ -16,6 +16,16 @@ export interface InterventionListParams {
   date_to?: string;
   search?: string;
   colleague_technician_id?: number;
+  city?: string;
+  contract_id?: number;
+  project_id?: number;
+  /** Independent from `status` — matches any status in the list. Used by
+   * "grouped" UI tabs (e.g. MyInterventionsPage's "Submitted" tab, which
+   * spans 4 distinct lifecycle statuses) so filtering can stay entirely
+   * server-side instead of re-filtering an already-paginated page
+   * client-side, which previously made the displayed row count and the
+   * pagination total disagree. */
+  status_in?: InterventionStatus[];
 }
 
 export interface InterventionInput {

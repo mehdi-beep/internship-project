@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -8,7 +10,7 @@ from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.schemas.contract import ContractCreate, ContractOut, ContractUpdate
 from app.schemas.pagination import Page
-from app.services import contract_service
+from app.services import deletion_service, contract_service
 
 router = APIRouter(tags=["contracts"])
 
@@ -32,10 +34,14 @@ def list_contracts(
     client_id: int | None = None,
     status_filter: ContractStatus | None = Query(None, alias="status"),
     search: str | None = None,
+    start_date_from: date | None = None,
+    start_date_to: date | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(*ALL_ROLES)),
 ) -> ApiResponse[Page[ContractOut]]:
-    result = contract_service.list_contracts(db, page, page_size, client_id, status_filter, search)
+    result = contract_service.list_contracts(
+        db, page, page_size, client_id, status_filter, search, start_date_from, start_date_to
+    )
     return ApiResponse(data=_to_page(result))
 
 
@@ -90,3 +96,32 @@ def archive_contract(
 ) -> ApiResponse[ContractOut]:
     contract = contract_service.archive_contract(db, contract_id)
     return ApiResponse(message="Contract archived.", data=ContractOut.model_validate(contract))
+
+
+@router.get("/contracts/{contract_id}/deletion-check", response_model=ApiResponse[dict])
+def check_contract_deletable(
+    contract_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin_supervisor")),
+) -> ApiResponse[dict]:
+    """Task 5 — lets the UI warn the Administrator *before* they confirm a
+    permanent deletion, instead of only failing afterwards."""
+    blockers = deletion_service.check_deletable(db, "contract", contract_id)
+    return ApiResponse(
+        data={
+            "deletable": deletion_service.is_deletable("contract", blockers),
+            "blockers": [{"label": b.label, "count": b.count} for b in blockers],
+        }
+    )
+
+
+@router.delete("/contracts/{contract_id}", response_model=ApiResponse[None])
+def delete_contract_permanently(
+    contract_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin_supervisor")),
+) -> ApiResponse[None]:
+    """Task 5 — PERMANENT hard delete (admin only). Refused with 409 if any
+    record still references this row; historical data is never cascaded."""
+    contract_service.delete_contract_permanently(db, contract_id)
+    return ApiResponse(message="Contract permanently deleted.", data=None)

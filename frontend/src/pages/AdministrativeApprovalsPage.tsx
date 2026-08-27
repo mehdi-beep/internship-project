@@ -60,7 +60,7 @@ export default function AdministrativeApprovalsPage() {
 
   const columns: DataTableColumn<Intervention>[] = [
     { key: "bi", label: "BI Number", render: (i) => i.bi_number },
-    { key: "client", label: "Client", render: (i) => clientNameById.get(i.client_id) ?? `#${i.client_id}` },
+    { key: "client", label: "Client", render: (i) => (i.client_id != null ? clientNameById.get(i.client_id) : undefined) ?? `#${i.client_id}` },
     {
       key: "technical_approval",
       label: "Technical Approval",
@@ -86,7 +86,7 @@ export default function AdministrativeApprovalsPage() {
   const calendarEvents: GenericCalendarEvent[] = datedItems.map((i) => ({
     id: i.id,
     date: i.technical_approval_date!,
-    title: `${i.bi_number} — ${clientNameById.get(i.client_id) ?? "Client"}`,
+    title: `${i.bi_number} — ${(i.client_id != null ? clientNameById.get(i.client_id) : undefined) ?? "Client"}`,
     color: interventionEventColor(i.status),
     onClick: () => setReviewingId(i.id),
   }));

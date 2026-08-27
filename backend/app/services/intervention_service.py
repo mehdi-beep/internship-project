@@ -92,6 +92,10 @@ def list_interventions(
     date_to: date | None,
     search: str | None,
     colleague_technician_id: int | None = None,
+    city: str | None = None,
+    contract_id: int | None = None,
+    project_id: int | None = None,
+    status_in: list[InterventionStatus] | None = None,
 ) -> Page:
     # Ch.16 — a technician may only see their own interventions. A technician
     # requesting the colleague_technician_id filter may only ever request it for
@@ -112,6 +116,10 @@ def list_interventions(
         date_to,
         search,
         colleague_technician_id,
+        city,
+        contract_id,
+        project_id,
+        status_in,
     )
     return paginate(db, stmt, page, page_size)
 
@@ -124,7 +132,17 @@ def _resolve_display_fields(intervention: Intervention) -> Intervention:
         intervention.warranty_reference.bi_number if intervention.warranty_reference else None
     )
     for entry in intervention.approval_history:
-        entry.approver_name = f"{entry.approver.first_name} {entry.approver.last_name}" if entry.approver else None
+        # entry.approver is the live relationship, resolvable only while the
+        # approver's account still exists. Once permanently deleted, approved_by
+        # is null and there is no live row left to join to — deleted_user_label
+        # (frozen at deletion time, see deletion_service.py) is the only
+        # remaining source of their name, so it takes over as the fallback
+        # rather than the approval silently losing its "approved by" text.
+        entry.approver_name = (
+            f"{entry.approver.first_name} {entry.approver.last_name}"
+            if entry.approver
+            else entry.deleted_user_label
+        )
     return intervention
 
 
@@ -277,7 +295,7 @@ def submit_intervention(db: Session, intervention_id: int, current_user_id: int,
             "submission_date": submission_time,
             # Ch.28 — computed automatically at submission time; technicians
             # cannot influence this (it is never accepted as request input).
-            "points_earned": business_logic_service.calculate_points(submission_time),
+            "points_earned": business_logic_service.calculate_points(db, submission_time),
         },
     )
     action = AuditAction.RESUBMITTED if was_rejected else AuditAction.SUBMITTED

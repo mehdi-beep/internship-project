@@ -66,7 +66,11 @@ class AttachmentOut(BaseModel):
     file_path: str
     content_type: str | None
     upload_date: datetime
-    uploaded_by: int
+    # Task 5: nullable because permanently deleting the uploader detaches
+    # (never deletes) the attachment — deleted_user_label carries their name
+    # forward once uploaded_by is cleared.
+    uploaded_by: int | None
+    deleted_user_label: str | None = None
 
 
 class ApprovalHistoryOut(BaseModel):
@@ -74,7 +78,11 @@ class ApprovalHistoryOut(BaseModel):
 
     id: int
     approval_level: str
-    approved_by: int
+    # Task 5: nullable for the same reason as AttachmentOut.uploaded_by above.
+    # approver_name already covers the display fallback (resolved server-side
+    # in intervention_service._resolve_display_fields, preferring
+    # deleted_user_label once the live approver is gone).
+    approved_by: int | None
     approver_name: str | None = None
     decision: str
     comment: str | None
@@ -85,7 +93,9 @@ class AuditLogOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    user_id: int
+    # Task 5: nullable for the same reason as the fields above.
+    user_id: int | None
+    deleted_user_label: str | None = None
     action: str
     comment: str | None
     created_at: datetime
@@ -96,9 +106,17 @@ class InterventionOut(BaseModel):
 
     id: int
     bi_number: str
-    technician_id: int
-    client_id: int
-    site_id: int
+    # Task 5: nullable because permanently deleting the lead technician
+    # detaches (never deletes) the intervention — deleted_user_label carries
+    # their name forward once technician_id is cleared.
+    technician_id: int | None
+    deleted_user_label: str | None = None
+    # Task 5: client_id/site_id are nullable because permanently deleting a
+    # Client, ClientSite, Contract or Project detaches (never deletes) the
+    # interventions that reference it — the intervention keeps its BI number,
+    # dates, duration, points and full approval/audit history regardless.
+    client_id: int | None
+    site_id: int | None
     contract_id: int | None
     project_id: int | None
     warranty_reference_id: int | None

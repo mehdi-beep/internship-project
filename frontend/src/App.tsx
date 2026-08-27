@@ -16,6 +16,7 @@ import SitesPage from "./pages/admin/SitesPage";
 import ContractsPage from "./pages/admin/ContractsPage";
 import ProjectsPage from "./pages/admin/ProjectsPage";
 import TravauxPage from "./pages/admin/TravauxPage";
+import PointRulesPage from "./pages/admin/PointRulesPage";
 import PlanningPage from "./pages/PlanningPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import MyInterventionsPage from "./pages/MyInterventionsPage";
@@ -26,6 +27,9 @@ import AdministrativeApprovalsPage from "./pages/AdministrativeApprovalsPage";
 import ReportsPage from "./pages/ReportsPage";
 import TechnicianProfilePage from "./pages/TechnicianProfilePage";
 import ProfilePage from "./pages/ProfilePage";
+import DisplayCalendarPage from "./pages/DisplayCalendarPage";
+import { useAuth } from "./context/AuthContext";
+import { dashboardPathForRole } from "./utils/roleRoutes";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,6 +39,18 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Replaces a hardcoded "/dashboard" fallback for "/" and any unmatched path:
+// the display role has no dashboard at all (DashboardPage.tsx renders
+// nothing for it), so blindly redirecting there would land it on a blank
+// page. Role-aware via the same dashboardPathForRole() LoginPage.tsx already
+// uses post-login, so all three redirect sites stay in agreement.
+function RootRedirect() {
+  const { isAuthenticated, isLoading, user } = useAuth();
+  if (isLoading) return null;
+  if (!isAuthenticated || !user) return <Navigate to="/login" replace />;
+  return <Navigate to={dashboardPathForRole(user.role)} replace />;
+}
 
 export default function App() {
   return (
@@ -114,6 +130,16 @@ export default function App() {
                     <ProtectedRoute allowedRoles={["admin_supervisor"]}>
                       <AppLayout>
                         <TravauxPage />
+                      </AppLayout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/point-rules"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin_supervisor"]}>
+                      <AppLayout>
+                        <PointRulesPage />
                       </AppLayout>
                     </ProtectedRoute>
                   }
@@ -228,8 +254,16 @@ export default function App() {
                     </ProtectedRoute>
                   }
                 />
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                <Route
+                  path="/display-calendar"
+                  element={
+                    <ProtectedRoute allowedRoles={["display"]}>
+                      <DisplayCalendarPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route path="/" element={<RootRedirect />} />
+                <Route path="*" element={<RootRedirect />} />
               </Routes>
             </NotificationPollingProvider>
           </AuthProvider>

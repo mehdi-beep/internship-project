@@ -61,3 +61,12 @@ def set_password(db: Session, user: User, password_hash: str) -> User:
     db.commit()
     db.refresh(user)
     return user
+
+
+def delete(db: Session, user: User) -> None:
+    """Hard delete. Callers MUST run deletion_service.detach_references first
+    — every foreign key pointing at this user needs to already be cleared (and
+    the user's name frozen onto each referencing row) before this can run
+    without hitting the model's ON DELETE RESTRICT foreign keys."""
+    db.delete(user)
+    db.commit()

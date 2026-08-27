@@ -16,13 +16,18 @@ export interface Attachment {
   file_path: string;
   content_type: string | null;
   upload_date: string;
-  uploaded_by: number;
+  // Task 5: nullable — permanently deleting the uploader detaches (never
+  // deletes) the attachment; deleted_user_label carries their name forward.
+  uploaded_by: number | null;
+  deleted_user_label?: string | null;
 }
 
 export interface ApprovalHistoryEntry {
   id: number;
   approval_level: string;
-  approved_by: number;
+  // Task 5: nullable for the same reason as Attachment.uploaded_by above.
+  // approver_name already covers the display fallback server-side.
+  approved_by: number | null;
   approver_name?: string | null;
   decision: string;
   comment: string | null;
@@ -31,7 +36,9 @@ export interface ApprovalHistoryEntry {
 
 export interface AuditLogEntry {
   id: number;
-  user_id: number;
+  // Task 5: nullable for the same reason as the fields above.
+  user_id: number | null;
+  deleted_user_label?: string | null;
   action: string;
   comment: string | null;
   created_at: string;
@@ -40,9 +47,15 @@ export interface AuditLogEntry {
 export interface Intervention {
   id: number;
   bi_number: string;
-  technician_id: number;
-  client_id: number;
-  site_id: number;
+  // Task 5: nullable — permanently deleting the lead technician detaches
+  // (never deletes) the intervention; deleted_user_label carries their name
+  // forward once technician_id is cleared.
+  technician_id: number | null;
+  deleted_user_label?: string | null;
+  // Task 5: nullable — permanently deleting the referenced Client or
+  // ClientSite detaches (never deletes) the intervention.
+  client_id: number | null;
+  site_id: number | null;
   contract_id: number | null;
   project_id: number | null;
   warranty_reference_id: number | null;

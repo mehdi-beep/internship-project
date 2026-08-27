@@ -26,6 +26,7 @@ import GroupIcon from "@mui/icons-material/GroupOutlined";
 import BusinessIcon from "@mui/icons-material/BusinessOutlined";
 import DescriptionIcon from "@mui/icons-material/DescriptionOutlined";
 import BuildIcon from "@mui/icons-material/BuildOutlined";
+import MilitaryTechIcon from "@mui/icons-material/MilitaryTechOutlined";
 import BarChartIcon from "@mui/icons-material/BarChartOutlined";
 import NotificationsIcon from "@mui/icons-material/NotificationsOutlined";
 import LogoutIcon from "@mui/icons-material/LogoutOutlined";
@@ -42,6 +43,7 @@ const ROLE_LABELS: Record<string, string> = {
   technician: "Technician",
   chef_technicien: "Chef des Techniciens",
   admin_supervisor: "Administration Supervisor",
+  display: "Display",
 };
 
 interface NavItem {
@@ -75,9 +77,16 @@ const NAV_ITEMS_BY_ROLE: Record<UserRole, NavItem[]> = {
     { label: "Contracts", icon: <DescriptionIcon />, path: "/admin/contracts" },
     { label: "Projects", icon: <DescriptionIcon />, path: "/admin/projects" },
     { label: "Travaux", icon: <BuildIcon />, path: "/admin/travaux" },
+    { label: "Point Management", icon: <MilitaryTechIcon />, path: "/admin/point-rules" },
     { label: "Reports", icon: <BarChartIcon />, path: "/reports" },
     { label: "Notifications", icon: <NotificationsIcon />, path: "/notifications" },
   ],
+  // The display role never actually renders AppLayout — its one page
+  // (DisplayCalendarPage) is deliberately layout-free (no sidebar/top bar,
+  // per "occupy the available screen efficiently") and routed outside
+  // ProtectedRoute+AppLayout entirely. Present here only so this Record
+  // stays exhaustively typed over every UserRole; empty by design.
+  display: [],
 };
 
 export default function AppLayout({ children }: { children: ReactNode }) {

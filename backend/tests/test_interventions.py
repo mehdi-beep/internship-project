@@ -221,6 +221,237 @@ class TestPagination:
         assert page1["total"] == page2["total"]
 
 
+class TestMultiStatusFilter:
+    """Regression guard for a real reported bug: MyInterventionsPage's
+    "Submitted" tab groups 4 statuses together, but the frontend used to
+    fetch one server-paginated page with no status filter at all and then
+    re-filter that page client-side — so `total` (the server's unfiltered
+    count) and the actually-rendered row count disagreed, and a later page
+    could render far fewer rows than page_size since most of that raw page
+    didn't belong to the group. status_in fixes this by making the
+    filtering happen server-side, so total and the visible rows always
+    agree — that agreement is exactly what these tests check."""
+
+    SUBMITTED_GROUP = ["submitted", "pending_technical_approval", "technical_approved", "pending_administrative_approval"]
+
+    def test_status_in_returns_only_matching_statuses(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        response = client.get(
+            "/api/interventions",
+            headers=admin,
+            params={"status_in": self.SUBMITTED_GROUP, "page_size": 50},
+        )
+        assert response.status_code == 200
+        items = response.json()["data"]["items"]
+        assert items, "seed data should include at least one intervention in the Submitted group"
+        assert all(i["status"] in self.SUBMITTED_GROUP for i in items)
+
+    def test_total_matches_the_actual_count_across_all_pages(self, client, auth_headers):
+        # The core of the bug: total must equal the number of rows you'd get
+        # by walking every page, not the server's whole-table count.
+        admin = auth_headers("admin01")
+        page_size = 5
+        first_page = client.get(
+            "/api/interventions",
+            headers=admin,
+            params={"status_in": self.SUBMITTED_GROUP, "page_size": page_size},
+        ).json()["data"]
+
+        collected = []
+        for page_num in range(1, first_page["pages"] + 1):
+            page = client.get(
+                "/api/interventions",
+                headers=admin,
+                params={"status_in": self.SUBMITTED_GROUP, "page_size": page_size, "page": page_num},
+            ).json()["data"]
+            collected.extend(page["items"])
+
+        assert len(collected) == first_page["total"]
+        assert all(i["status"] in self.SUBMITTED_GROUP for i in collected)
+
+    def test_status_in_is_independent_of_the_single_status_filter(self, client, auth_headers):
+        # Sending both should not silently ignore one — status narrows further.
+        admin = auth_headers("admin01")
+        response = client.get(
+            "/api/interventions",
+            headers=admin,
+            params={"status": "fully_approved", "status_in": self.SUBMITTED_GROUP, "page_size": 20},
+        )
+        assert response.status_code == 200
+        # fully_approved is not in SUBMITTED_GROUP, so combining both (AND
+        # semantics) must yield nothing — proving they're separate,
+        # independently-applied filters rather than one overriding the other.
+        assert response.json()["data"]["items"] == []
+
+    def test_technician_still_scoped_to_own_rows_with_status_in(self, client, auth_headers):
+        tech1 = auth_headers("tech01")
+        me = client.get("/api/auth/me", headers=tech1).json()["data"]
+        rows = client.get(
+            "/api/interventions",
+            headers=tech1,
+            params={"status_in": self.SUBMITTED_GROUP, "page_size": 100},
+        ).json()["data"]["items"]
+        assert all(i["technician_id"] == me["id"] for i in rows)
+
+
+class TestNewFilters:
+    """Ch.83 filter set added for Task 1 — technician/city/type/contract/project,
+    plus the broadened (BI/client/site) search, on top of the existing filters."""
+
+    def test_technician_filter_returns_only_that_technicians_interventions(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        tech1_id = client.get("/api/auth/me", headers=auth_headers("tech01")).json()["data"]["id"]
+
+        filtered = client.get(
+            "/api/interventions", params={"technician_id": tech1_id, "page_size": 100}, headers=admin
+        ).json()["data"]["items"]
+        assert filtered
+        assert all(i["technician_id"] == tech1_id for i in filtered)
+
+    def test_technician_cannot_use_technician_id_to_view_anothers_interventions(self, client, auth_headers):
+        # Ch.16 — a technician's own visibility scope is enforced server-side
+        # regardless of what technician_id they pass; this guards that adding
+        # the filter param didn't accidentally open an escape hatch.
+        tech1 = auth_headers("tech01")
+        tech2_id = client.get("/api/auth/me", headers=auth_headers("tech02")).json()["data"]["id"]
+
+        result = client.get(
+            "/api/interventions", params={"technician_id": tech2_id, "page_size": 100}, headers=tech1
+        ).json()["data"]["items"]
+        assert all(i["technician_id"] != tech2_id for i in result)
+
+    def test_technician_can_filter_own_list_by_contract_and_project(self, client, auth_headers):
+        # Contract/Project filters are shown to every role in the frontend
+        # (unlike Technician, which is Chef/Admin-only): a technician narrowing
+        # their own already-visible list by contract/project is a legitimate
+        # read, not a permission escalation, since GET /contracts and
+        # GET /projects are already T/C/A endpoints and technicians create
+        # contract-/project-type interventions themselves.
+        tech1 = auth_headers("tech01")
+        tech1_id = client.get("/api/auth/me", headers=tech1).json()["data"]["id"]
+
+        own_contract_type = client.get(
+            "/api/interventions",
+            params={"technician_id": tech1_id, "intervention_type": "contract", "page_size": 100},
+            headers=tech1,
+        ).json()["data"]["items"]
+        if not own_contract_type:
+            pytest.skip("tech01 has no seeded contract-type interventions to exercise this filter with")
+        target_contract_id = own_contract_type[0]["contract_id"]
+
+        filtered = client.get(
+            "/api/interventions", params={"contract_id": target_contract_id, "page_size": 100}, headers=tech1
+        ).json()["data"]["items"]
+        assert filtered
+        # Still scoped to only their own rows even though contract_id is a
+        # cross-technician-shared attribute (the Ch.16 owner check runs first).
+        assert all(i["technician_id"] == tech1_id and i["contract_id"] == target_contract_id for i in filtered)
+
+    def test_city_filter_returns_only_interventions_at_sites_in_that_city(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        cities = client.get("/api/sites/cities", headers=admin).json()["data"]
+        assert cities
+
+        target = cities[0]
+        site_ids_in_city = {
+            s["id"]
+            for s in client.get("/api/sites", params={"city": target, "page_size": 100}, headers=admin).json()["data"]["items"]
+        }
+        filtered = client.get(
+            "/api/interventions", params={"city": target, "page_size": 100}, headers=admin
+        ).json()["data"]["items"]
+        assert filtered
+        assert all(i["site_id"] in site_ids_in_city for i in filtered)
+
+    def test_intervention_type_filter(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        filtered = client.get(
+            "/api/interventions", params={"intervention_type": "warranty", "page_size": 100}, headers=admin
+        ).json()["data"]["items"]
+        assert filtered, "seed data should include warranty interventions"
+        assert all(i["intervention_type"] == "warranty" for i in filtered)
+
+    def test_contract_filter_returns_only_that_contracts_interventions(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        by_type = client.get(
+            "/api/interventions", params={"intervention_type": "contract", "page_size": 100}, headers=admin
+        ).json()["data"]["items"]
+        assert by_type, "seed data should include contract-type interventions"
+        target_contract_id = next(i["contract_id"] for i in by_type if i["contract_id"] is not None)
+
+        filtered = client.get(
+            "/api/interventions", params={"contract_id": target_contract_id, "page_size": 100}, headers=admin
+        ).json()["data"]["items"]
+        assert filtered
+        assert all(i["contract_id"] == target_contract_id for i in filtered)
+
+    def test_project_filter_returns_only_that_projects_interventions(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        by_type = client.get(
+            "/api/interventions", params={"intervention_type": "project", "page_size": 100}, headers=admin
+        ).json()["data"]["items"]
+        assert by_type, "seed data should include project-type interventions"
+        target_project_id = next(i["project_id"] for i in by_type if i["project_id"] is not None)
+
+        filtered = client.get(
+            "/api/interventions", params={"project_id": target_project_id, "page_size": 100}, headers=admin
+        ).json()["data"]["items"]
+        assert filtered
+        assert all(i["project_id"] == target_project_id for i in filtered)
+
+    def test_search_matches_client_name_not_just_bi_number(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        some_client = client.get("/api/clients", params={"page_size": 1}, headers=admin).json()["data"]["items"][0]
+        name_fragment = some_client["client_name"][:4]
+
+        by_client_filter = client.get(
+            "/api/interventions", params={"client_id": some_client["id"], "page_size": 100}, headers=admin
+        ).json()["data"]["items"]
+        if not by_client_filter:
+            pytest.skip("seeded client has no interventions to exercise the search-by-name path")
+
+        by_search = client.get(
+            "/api/interventions", params={"search": name_fragment, "page_size": 100}, headers=admin
+        ).json()["data"]["items"]
+        assert any(i["client_id"] == some_client["id"] for i in by_search)
+
+    def test_city_filter_combined_with_search_does_not_error(self, client, auth_headers):
+        # Regression guard: city and search both join client_sites — combining
+        # them must not double-join the same table (SQLAlchemy raises on a
+        # duplicate FROM entry rather than silently doing the wrong thing).
+        admin = auth_headers("admin01")
+        cities = client.get("/api/sites/cities", headers=admin).json()["data"]
+        target = cities[0]
+
+        response = client.get(
+            "/api/interventions", params={"city": target, "search": "BI0", "page_size": 50}, headers=admin
+        )
+        assert response.status_code == 200
+        items = response.json()["data"]["items"]
+        assert all("BI0" in i["bi_number"] for i in items)
+
+    def test_multiple_filters_combined_narrows_results(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        unfiltered = client.get("/api/interventions", params={"page_size": 1}, headers=admin).json()["data"]["total"]
+        combined = client.get(
+            "/api/interventions",
+            params={"status": "fully_approved", "intervention_type": "standard", "page_size": 1},
+            headers=admin,
+        ).json()["data"]["total"]
+        assert 0 <= combined <= unfiltered
+
+    def test_filters_return_empty_not_error_for_nonmatching_combination(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        response = client.get(
+            "/api/interventions",
+            params={"status": "draft", "intervention_type": "warranty", "search": "ZZZ_NO_MATCH_ZZZ"},
+            headers=admin,
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["items"] == []
+        assert response.json()["data"]["total"] == 0
+
+
 class TestAttachmentValidation:
     def test_unsupported_content_type_rejected(self, client, auth_headers, base_payload):
         tech1 = auth_headers("tech01")

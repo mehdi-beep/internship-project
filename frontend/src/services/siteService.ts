@@ -1,5 +1,6 @@
-import { fetchPage, fetchOne, postOne, putOne, patchOne } from "../api/queryHelpers";
+import { fetchPage, fetchOne, postOne, putOne, patchOne, deleteOne } from "../api/queryHelpers";
 import type { ClientSite } from "../types/referenceData";
+import type { DeletionCheck } from "../types/deletion";
 
 export interface SiteListParams {
   page?: number;
@@ -18,8 +19,14 @@ export interface SiteInput {
 }
 
 export const listSites = (params: SiteListParams = {}) => fetchPage<ClientSite>("/sites", params);
+export const listSiteCities = () => fetchOne<string[]>("/sites/cities");
 export const getSite = (id: number) => fetchOne<ClientSite>(`/sites/${id}`);
 export const createSite = (input: SiteInput) => postOne<ClientSite>("/sites", input);
 export const updateSite = (id: number, input: Omit<SiteInput, "client_id">) => putOne<ClientSite>(`/sites/${id}`, input);
 export const deactivateSite = (id: number) => patchOne<ClientSite>(`/sites/${id}/deactivate`);
 export const activateSite = (id: number) => patchOne<ClientSite>(`/sites/${id}/activate`);
+
+// --- Task 5: permanent deletion (Administrator only) ---
+export const checkSiteDeletable = (id: number) =>
+  fetchOne<DeletionCheck>(`/sites/${id}/deletion-check`);
+export const deleteSitePermanently = (id: number) => deleteOne(`/sites/${id}`);

@@ -1,5 +1,6 @@
-import { fetchPage, fetchOne, postOne, putOne, patchOne } from "../api/queryHelpers";
+import { fetchPage, fetchOne, postOne, putOne, patchOne, deleteOne } from "../api/queryHelpers";
 import type { Contract, ContractStatus } from "../types/referenceData";
+import type { DeletionCheck } from "../types/deletion";
 
 export interface ContractListParams {
   page?: number;
@@ -7,6 +8,8 @@ export interface ContractListParams {
   client_id?: number;
   status?: ContractStatus;
   search?: string;
+  start_date_from?: string;
+  start_date_to?: string;
 }
 
 export interface ContractInput {
@@ -22,3 +25,8 @@ export const createContract = (input: ContractInput) => postOne<Contract>("/cont
 export const updateContract = (id: number, input: Omit<ContractInput, "client_id">) =>
   putOne<Contract>(`/contracts/${id}`, input);
 export const archiveContract = (id: number) => patchOne<Contract>(`/contracts/${id}/archive`);
+
+// --- Task 5: permanent deletion (Administrator only) ---
+export const checkContractDeletable = (id: number) =>
+  fetchOne<DeletionCheck>(`/contracts/${id}/deletion-check`);
+export const deleteContractPermanently = (id: number) => deleteOne(`/contracts/${id}`);

@@ -17,13 +17,18 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/EditOutlined";
 import BlockIcon from "@mui/icons-material/BlockOutlined";
 import CheckCircleIcon from "@mui/icons-material/CheckCircleOutlined";
+import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
 import KeyIcon from "@mui/icons-material/KeyOutlined";
 import { useForm } from "react-hook-form";
 import DataTable, { type DataTableColumn } from "../../components/DataTable";
 import SearchBar from "../../components/SearchBar";
 import Modal from "../../components/Modal";
 import ConfirmationDialog from "../../components/ConfirmationDialog";
+import PermanentDeleteDialog from "../../components/PermanentDeleteDialog";
+import { usePermanentDelete } from "../../hooks/usePermanentDelete";
 import {
+  checkUserDeletable,
+  deleteUserPermanently,
   activateUser,
   createUser,
   deactivateUser,
@@ -40,6 +45,11 @@ const ROLE_LABELS: Record<UserRole, string> = {
   technician: "Technician",
   chef_technicien: "Chef des Techniciens",
   admin_supervisor: "Administration Supervisor",
+  // Task 3 — surfaced here too (not just seeded once) so the Administrator
+  // can create additional hallway-display accounts through the existing
+  // Users CRUD if a second physical screen/location is ever added, rather
+  // than needing a bespoke account-creation flow for one role.
+  display: "Display (Hallway Calendar)",
 };
 
 type FormValues = UserCreateInput;
@@ -155,12 +165,34 @@ export default function UsersPage() {
     }
   };
 
+  // Task 5 — permanent deletion, deliberately separate from the
+  // deactivate/archive flow (different dialog, icon and colour).
+  const permanentDelete = usePermanentDelete<AppUser>({
+    invalidateKey: "users",
+    check: checkUserDeletable,
+    remove: deleteUserPermanently,
+    getName: (u) => `${u.first_name} ${u.last_name}`,
+    getId: (u) => u.id,
+  });
+
   const columns: DataTableColumn<AppUser>[] = [
     { key: "name", label: "Name", render: (u) => `${u.first_name} ${u.last_name}` },
     { key: "username", label: "Username", render: (u) => u.username },
     { key: "email", label: "Email", render: (u) => u.email },
     { key: "role", label: "Role", render: (u) => <Chip size="small" label={ROLE_LABELS[u.role]} /> },
-    { key: "status", label: "Status", render: (u) => (u.active ? "Active" : "Inactive") },
+    {
+      key: "status",
+      label: "Status",
+      // Task 5 — inactive state must be unmistakable, not plain text.
+      render: (u) => (
+        <Chip
+          size="small"
+          label={u.active ? "Active" : "Inactive"}
+          color={u.active ? "success" : "default"}
+          variant={u.active ? "filled" : "outlined"}
+        />
+      ),
+    },
     {
       key: "actions",
       label: "Actions",
@@ -177,9 +209,14 @@ export default function UsersPage() {
               <KeyIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title={u.active ? "Deactivate" : "Activate"}>
+          <Tooltip title={u.active ? "Deactivate (keeps history)" : "Activate"}>
             <IconButton size="small" onClick={() => { setConfirmErrorMessage(null); setConfirmTarget(u); }}>
               {u.active ? <BlockIcon fontSize="small" /> : <CheckCircleIcon fontSize="small" />}
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete permanently">
+            <IconButton size="small" color="error" onClick={() => permanentDelete.start(u)}>
+              <DeleteForeverIcon fontSize="small" />
             </IconButton>
           </Tooltip>
         </Stack>
@@ -343,11 +380,24 @@ export default function UsersPage() {
             : `Reactivate "${confirmTarget?.first_name} ${confirmTarget?.last_name}"?`
         }
         confirmLabel={confirmTarget?.active ? "Deactivate" : "Activate"}
-        confirmColor={confirmTarget?.active ? "error" : "primary"}
+        // Task 5 — amber, not red: red is reserved for permanent deletion.
+        confirmColor={confirmTarget?.active ? "warning" : "primary"}
         loading={toggleActiveMutation.isPending}
         errorMessage={confirmErrorMessage}
         onConfirm={() => confirmTarget && toggleActiveMutation.mutate(confirmTarget)}
         onCancel={() => { setConfirmTarget(null); setConfirmErrorMessage(null); }}
+      />
+
+      <PermanentDeleteDialog
+        open={permanentDelete.open}
+        entityNoun="user"
+        entityName={permanentDelete.name}
+        check={permanentDelete.deletionCheck}
+        checkLoading={permanentDelete.checkLoading}
+        loading={permanentDelete.loading}
+        errorMessage={permanentDelete.errorMessage}
+        onConfirm={permanentDelete.confirm}
+        onCancel={permanentDelete.cancel}
       />
     </Box>
   );

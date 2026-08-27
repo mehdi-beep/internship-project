@@ -64,6 +64,7 @@ def client():
             "app.models.contract",
             "app.models.project",
             "app.models.travail",
+            "app.models.point_rule",
             "app.models.intervention",
             "app.models.intervention_task",
             "app.models.intervention_technician",

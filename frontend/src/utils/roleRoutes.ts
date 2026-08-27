@@ -8,6 +8,11 @@ export function dashboardPathForRole(role: UserRole): string {
       return "/dashboard";
     case "admin_supervisor":
       return "/dashboard";
+    // Task 3 — the display role has no dashboard at all (DashboardPage.tsx
+    // renders nothing for it); its one and only destination is the
+    // dedicated full-screen calendar.
+    case "display":
+      return "/display-calendar";
     default:
       return "/dashboard";
   }

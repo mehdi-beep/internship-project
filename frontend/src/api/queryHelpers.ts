@@ -41,3 +41,13 @@ export async function patchOne<T>(url: string, body?: unknown): Promise<T> {
   }
   return data.data;
 }
+
+/** Task 5 — DELETE returning no payload. Unlike the helpers above it must NOT
+ * treat an absent `data` as failure, since a successful permanent deletion
+ * legitimately responds with `data: null`. */
+export async function deleteOne(url: string): Promise<void> {
+  const { data } = await apiClient.delete<ApiResponse<null>>(url);
+  if (data && data.success === false) {
+    throw new Error(data.message ?? "Delete failed.");
+  }
+}

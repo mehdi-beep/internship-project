@@ -152,9 +152,14 @@ export default function PlanningPage() {
   const openEdit = (planning: Planning) => {
     setEditing(planning);
     reset({
-      technician_id: planning.technician_id,
-      client_id: planning.client_id,
-      site_id: planning.site_id,
+      // A deleted technician can never appear in the live dropdown below, so
+      // there's no real value to preselect — 0 deliberately fails the
+      // field's own `validate: (v) => v > 0` rule, correctly forcing whoever
+      // edits this entry to actively choose a replacement before saving,
+      // rather than silently submitting a stale/impossible id.
+      technician_id: planning.technician_id ?? 0,
+      client_id: planning.client_id ?? 0,
+      site_id: planning.site_id ?? 0,
       planned_date: planning.planned_date,
       planned_start_time: planning.planned_start_time.slice(0, 5),
       estimated_duration_minutes: planning.estimated_duration_minutes ?? "",
@@ -197,8 +202,18 @@ export default function PlanningPage() {
     }
   };
 
-  const eventLabel = (planning: Planning) =>
-    `${technicianNameById.get(planning.technician_id) ?? "Technician"} — ${clientNameById.get(planning.client_id) ?? "Client"}`;
+  const eventLabel = (planning: Planning) => {
+    // A deleted technician's name is frozen server-side into
+    // deleted_technician_label — preferred here over the generic fallback
+    // (unlike client/site, which have no equivalent frozen value; see
+    // PlanningDisplayOut for the same asymmetry on the display-role calendar).
+    const technicianLabel =
+      (planning.technician_id != null ? technicianNameById.get(planning.technician_id) : undefined) ??
+      planning.deleted_technician_label ??
+      "Technician";
+    const clientLabel = (planning.client_id != null ? clientNameById.get(planning.client_id) : undefined) ?? "Client";
+    return `${technicianLabel} — ${clientLabel}`;
+  };
 
   const activeEntries = (planningPage?.items ?? []).filter((p) => p.status !== "cancelled");
   const urgentCount = activeEntries.filter((p) => p.priority === "urgent").length;

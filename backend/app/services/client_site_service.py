@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.models.client_site import ClientSite
 from app.repositories import client_repository, client_site_repository
+from app.services import deletion_service
 from app.schemas.client_site import ClientSiteCreate, ClientSiteUpdate
 from app.schemas.pagination import Page
 from app.utils.pagination import paginate
@@ -13,6 +14,10 @@ def list_sites(
 ) -> Page:
     stmt = client_site_repository.list_query(client_id, city, search, active_only)
     return paginate(db, stmt, page, page_size)
+
+
+def list_cities(db: Session) -> list[str]:
+    return client_site_repository.list_cities(db)
 
 
 def get_site(db: Session, site_id: int) -> ClientSite:
@@ -45,3 +50,13 @@ def deactivate_site(db: Session, site_id: int) -> ClientSite:
 def activate_site(db: Session, site_id: int) -> ClientSite:
     site = get_site(db, site_id)
     return client_site_repository.set_active(db, site, True)
+
+
+def delete_client_site_permanently(db: Session, client_site_id: int) -> None:
+    """Task 5 — permanent hard delete. Any referencing rows (interventions,
+    planning, etc.) are DETACHED, not deleted: they keep all their own data
+    and simply lose the link to this record. See deletion_service."""
+    site = get_site(db, client_site_id)
+    deletion_service.ensure_deletable(db, "client_site", client_site_id)
+    deletion_service.detach_references(db, "client_site", client_site_id)
+    client_site_repository.delete(db, site)

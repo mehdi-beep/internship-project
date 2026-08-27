@@ -15,9 +15,19 @@ class Intervention(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     bi_number: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, index=True)
 
-    technician_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
-    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id"), nullable=False, index=True)
-    site_id: Mapped[int] = mapped_column(ForeignKey("client_sites.id"), nullable=False, index=True)
+    # Nullable (Task 5 revision): an Administrator may permanently delete the
+    # lead technician even when they have real recorded history. The
+    # intervention survives with the link cleared and the technician's name
+    # frozen into deleted_user_label instead — see deletion_service.py.
+    technician_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    deleted_user_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Nullable (Task 5 revision): an Administrator may permanently delete a
+    # client/site even when interventions reference it. The intervention row
+    # itself is never destroyed — its link is cleared instead, so all its own
+    # history (BI number, dates, duration, points, approvals, audit log)
+    # survives intact with the client/site simply shown as unavailable.
+    client_id: Mapped[int | None] = mapped_column(ForeignKey("clients.id"), nullable=True, index=True)
+    site_id: Mapped[int | None] = mapped_column(ForeignKey("client_sites.id"), nullable=True, index=True)
     contract_id: Mapped[int | None] = mapped_column(ForeignKey("contracts.id"), nullable=True)
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
     warranty_reference_id: Mapped[int | None] = mapped_column(ForeignKey("interventions.id"), nullable=True)
@@ -53,7 +63,7 @@ class Intervention(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
-    technician: Mapped["User"] = relationship(foreign_keys=[technician_id])
+    technician: Mapped["User | None"] = relationship(foreign_keys=[technician_id])
     client: Mapped["Client"] = relationship()
     site: Mapped["ClientSite"] = relationship()
     contract: Mapped["Contract | None"] = relationship()

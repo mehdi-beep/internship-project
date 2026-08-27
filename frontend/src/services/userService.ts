@@ -1,6 +1,7 @@
-import { fetchPage, fetchOne, postOne, putOne, patchOne } from "../api/queryHelpers";
+import { fetchPage, fetchOne, postOne, putOne, patchOne, deleteOne } from "../api/queryHelpers";
 import type { UserRole } from "../types/enums";
 import type { AppUser, TechnicianOption } from "../types/referenceData";
+import type { DeletionCheck } from "../types/deletion";
 
 export interface UserListParams {
   page?: number;
@@ -38,3 +39,8 @@ export const activateUser = (id: number) => patchOne<AppUser>(`/users/${id}/acti
 export const deactivateUser = (id: number) => patchOne<AppUser>(`/users/${id}/deactivate`);
 export const resetPassword = (id: number, newPassword: string) =>
   patchOne<AppUser>(`/users/${id}/reset-password`, { new_password: newPassword });
+
+// --- Task 5: permanent deletion (Administrator only) ---
+export const checkUserDeletable = (id: number) =>
+  fetchOne<DeletionCheck>(`/users/${id}/deletion-check`);
+export const deleteUserPermanently = (id: number) => deleteOne(`/users/${id}`);

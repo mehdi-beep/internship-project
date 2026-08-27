@@ -12,7 +12,7 @@ import {
 } from "@mui/material";
 import StatTile from "../../components/StatTile";
 import ChartCard from "../../components/ChartCard";
-import SimpleBarChart from "../../components/SimpleBarChart";
+import SwitchableChartCard from "../../components/SwitchableChartCard";
 import QueryStateGate from "../../components/QueryStateGate";
 import PeriodModeSelector, { type PeriodMode } from "../../components/PeriodModeSelector";
 import UrgentQueueList from "../../components/UrgentQueueList";
@@ -69,24 +69,29 @@ function ChefDashboardBody({ data }: { data: ChefDashboard }) {
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
-          <ChartCard title="Interventions by Technician">
-            <SimpleBarChart data={charts?.interventions_by_technician_chart ?? []} colorIndex={0} />
-          </ChartCard>
+          <SwitchableChartCard
+            title="Interventions by Technician"
+            data={charts?.interventions_by_technician_chart ?? []}
+            colorIndex={0}
+          />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <ChartCard title="Interventions by Client">
-            <SimpleBarChart data={charts?.interventions_by_client_chart ?? []} colorIndex={2} />
-          </ChartCard>
+          <SwitchableChartCard
+            title="Interventions by Client"
+            data={charts?.interventions_by_client_chart ?? []}
+            colorIndex={2}
+          />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <ChartCard title="Activity">
-            <SimpleBarChart data={charts?.activity_chart ?? []} colorIndex={1} />
-          </ChartCard>
+          <SwitchableChartCard title="Activity" data={charts?.activity_chart ?? []} colorIndex={1} />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <ChartCard title="Technician Workload">
-            <SimpleBarChart data={charts?.technician_workload ?? []} colorIndex={4} emptyLabel="No planning assigned for this period." />
-          </ChartCard>
+          <SwitchableChartCard
+            title="Technician Workload"
+            data={charts?.technician_workload ?? []}
+            colorIndex={4}
+            emptyLabel="No planning assigned for this period."
+          />
         </Grid>
       </Grid>
 

@@ -22,7 +22,9 @@ class ProjectOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    client_id: int
+    # Task 5: nullable because permanently deleting a Client detaches (does
+    # not delete) its projects — the project survives with client_id null.
+    client_id: int | None
     project_name: str
     start_date: date
     end_date: date | None

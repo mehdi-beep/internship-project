@@ -4,7 +4,9 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   IconButton,
+  MenuItem,
   Stack,
   Switch,
   TextField,
@@ -15,19 +17,25 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/EditOutlined";
 import BlockIcon from "@mui/icons-material/BlockOutlined";
 import CheckCircleIcon from "@mui/icons-material/CheckCircleOutlined";
+import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
 import { useForm } from "react-hook-form";
 import DataTable, { type DataTableColumn } from "../../components/DataTable";
 import SearchBar from "../../components/SearchBar";
 import Modal from "../../components/Modal";
 import ConfirmationDialog from "../../components/ConfirmationDialog";
+import PermanentDeleteDialog from "../../components/PermanentDeleteDialog";
+import { usePermanentDelete } from "../../hooks/usePermanentDelete";
 import {
   activateClient,
+  checkClientDeletable,
   createClient,
   deactivateClient,
+  deleteClientPermanently,
   listClients,
   updateClient,
   type ClientInput,
 } from "../../services/clientService";
+import { listSiteCities } from "../../services/siteService";
 import type { Client } from "../../types/referenceData";
 
 export default function ClientsPage() {
@@ -35,6 +43,7 @@ export default function ClientsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [search, setSearch] = useState("");
+  const [cityFilter, setCityFilter] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -43,8 +52,20 @@ export default function ClientsPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["clients", page, pageSize, search, showInactive],
-    queryFn: () => listClients({ page, page_size: pageSize, search: search || undefined, active_only: !showInactive }),
+    queryKey: ["clients", page, pageSize, search, cityFilter, showInactive],
+    queryFn: () =>
+      listClients({
+        page,
+        page_size: pageSize,
+        search: search || undefined,
+        city: cityFilter || undefined,
+        active_only: !showInactive,
+      }),
+  });
+
+  const { data: cities } = useQuery({
+    queryKey: ["sites", "cities"],
+    queryFn: listSiteCities,
   });
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<ClientInput>();
@@ -101,11 +122,33 @@ export default function ClientsPage() {
     }
   };
 
+  // Task 5 — permanent deletion, kept deliberately separate from the
+  // deactivate flow above (different dialog, different icon, different colour).
+  const permanentDelete = usePermanentDelete<Client>({
+    invalidateKey: "clients",
+    check: checkClientDeletable,
+    remove: deleteClientPermanently,
+    getName: (c) => c.client_name,
+    getId: (c) => c.id,
+  });
+
   const columns: DataTableColumn<Client>[] = [
     { key: "name", label: "Client Name", render: (c) => c.client_name },
     { key: "phone", label: "Phone", render: (c) => c.phone ?? "—" },
     { key: "email", label: "Email", render: (c) => c.email ?? "—" },
-    { key: "status", label: "Status", render: (c) => (c.active ? "Active" : "Inactive") },
+    {
+      key: "status",
+      label: "Status",
+      // Task 5 — inactive state must be unmistakable, not plain text.
+      render: (c) => (
+        <Chip
+          size="small"
+          label={c.active ? "Active" : "Inactive"}
+          color={c.active ? "success" : "default"}
+          variant={c.active ? "filled" : "outlined"}
+        />
+      ),
+    },
     {
       key: "actions",
       label: "Actions",
@@ -117,9 +160,14 @@ export default function ClientsPage() {
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title={c.active ? "Deactivate" : "Activate"}>
+          <Tooltip title={c.active ? "Deactivate (keeps history)" : "Activate"}>
             <IconButton size="small" onClick={() => { setConfirmErrorMessage(null); setConfirmTarget(c); }}>
               {c.active ? <BlockIcon fontSize="small" /> : <CheckCircleIcon fontSize="small" />}
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete permanently">
+            <IconButton size="small" color="error" onClick={() => permanentDelete.start(c)}>
+              <DeleteForeverIcon fontSize="small" />
             </IconButton>
           </Tooltip>
         </Stack>
@@ -138,8 +186,23 @@ export default function ClientsPage() {
         </Button>
       </Stack>
 
-      <Stack direction="row" spacing={2} sx={{ alignItems: "center", mb: 2 }}>
+      <Stack direction="row" spacing={2} sx={{ alignItems: "center", mb: 2, flexWrap: "wrap" }}>
         <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search clients..." />
+        <TextField
+          select
+          size="small"
+          label="City"
+          value={cityFilter}
+          onChange={(e) => { setCityFilter(e.target.value); setPage(1); }}
+          sx={{ minWidth: 160 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          {(cities ?? []).map((city) => (
+            <MenuItem key={city} value={city}>
+              {city}
+            </MenuItem>
+          ))}
+        </TextField>
         <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
           <Switch checked={showInactive} onChange={(e) => { setShowInactive(e.target.checked); setPage(1); }} size="small" />
           <Typography variant="body2">Show inactive</Typography>
@@ -194,15 +257,29 @@ export default function ClientsPage() {
         title={confirmTarget?.active ? "Deactivate Client" : "Activate Client"}
         message={
           confirmTarget?.active
-            ? `Deactivate "${confirmTarget?.client_name}"? It will no longer appear as a selectable client.`
+            ? `Deactivate "${confirmTarget?.client_name}"? It will be hidden from active views and can no longer be selected, but the client and all its history are kept and it can be reactivated at any time.`
             : `Reactivate "${confirmTarget?.client_name}"?`
         }
         confirmLabel={confirmTarget?.active ? "Deactivate" : "Activate"}
-        confirmColor={confirmTarget?.active ? "error" : "primary"}
+        // Task 5 — deliberately "warning" (amber), not "error" (red): red is
+        // reserved for permanent deletion so the two are never confusable.
+        confirmColor={confirmTarget?.active ? "warning" : "primary"}
         loading={toggleActiveMutation.isPending}
         errorMessage={confirmErrorMessage}
         onConfirm={() => confirmTarget && toggleActiveMutation.mutate(confirmTarget)}
         onCancel={() => { setConfirmTarget(null); setConfirmErrorMessage(null); }}
+      />
+
+      <PermanentDeleteDialog
+        open={permanentDelete.open}
+        entityNoun="client"
+        entityName={permanentDelete.name}
+        check={permanentDelete.deletionCheck}
+        checkLoading={permanentDelete.checkLoading}
+        loading={permanentDelete.loading}
+        errorMessage={permanentDelete.errorMessage}
+        onConfirm={permanentDelete.confirm}
+        onCancel={permanentDelete.cancel}
       />
     </Box>
   );

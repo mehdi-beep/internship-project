@@ -200,6 +200,15 @@ export default function InterventionReviewViewer({
   const site = sitesData?.items.find((s) => s.id === intervention?.site_id);
   const travailById = new Map((travauxData?.items ?? []).map((t) => [t.id, t]));
   const technicianNameById = new Map((technicianOptions ?? []).map((t) => [t.id, `${t.first_name} ${t.last_name}`]));
+  // The lead technician lookup is sourced from an active-only technician
+  // list, so it already can't resolve a deactivated account's name — and now
+  // it also can't resolve a permanently deleted one, since technician_id
+  // itself is null in that case. deleted_user_label (frozen at deletion
+  // time) is the only remaining source of their name once that happens.
+  const leadTechnicianName =
+    intervention?.technician_id != null
+      ? technicianNameById.get(intervention.technician_id)
+      : (intervention?.deleted_user_label ?? undefined);
   const contractName = contractsData?.items.find((c) => c.id === intervention?.contract_id)?.contract_name;
   const projectName = projectsData?.items.find((p) => p.id === intervention?.project_id)?.project_name;
   const formatDuration = (minutes: number) => `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}`;
@@ -245,7 +254,7 @@ export default function InterventionReviewViewer({
                   <Field label="Status" value={<StatusBadge status={intervention.status} />} />
                 </Stack>
                 <Stack direction="row" spacing={3}>
-                  <Field label="Technician" value={technicianNameById.get(intervention.technician_id)} />
+                  <Field label="Technician" value={leadTechnicianName} />
                   <Field label="Submitted" value={intervention.submission_date ? dayjs(intervention.submission_date).format("MMM D, YYYY HH:mm") : "—"} />
                 </Stack>
                 <Stack direction="row" spacing={3}>
@@ -285,7 +294,7 @@ export default function InterventionReviewViewer({
                     Team
                   </Typography>
                   <Stack direction="row" spacing={3} sx={{ mt: 0.5, mb: intervention.colleague_technicians.length ? 1 : 0 }}>
-                    <Field label="Lead Technician" value={technicianNameById.get(intervention.technician_id)} />
+                    <Field label="Lead Technician" value={leadTechnicianName} />
                     <Field label="Number of Technicians" value={intervention.number_of_technicians} />
                   </Stack>
                   {intervention.colleague_technicians.length > 0 && (
@@ -375,7 +384,8 @@ export default function InterventionReviewViewer({
                               color={entry.decision === "approved" ? "success" : "error"}
                             />
                             <Typography variant="body2">
-                              {entry.approval_level} — {entry.approver_name ?? `User #${entry.approved_by}`}
+                              {entry.approval_level} —{" "}
+                              {entry.approver_name ?? (entry.approved_by != null ? `User #${entry.approved_by}` : "Unknown user")}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
                               {dayjs(entry.approval_date).format("MMM D, YYYY HH:mm")}

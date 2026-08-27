@@ -14,14 +14,17 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import ArchiveIcon from "@mui/icons-material/ArchiveOutlined";
+import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
 import { Controller, useForm } from "react-hook-form";
 import DataTable, { type DataTableColumn } from "../../components/DataTable";
 import SearchBar from "../../components/SearchBar";
 import Modal from "../../components/Modal";
 import ConfirmationDialog from "../../components/ConfirmationDialog";
+import PermanentDeleteDialog from "../../components/PermanentDeleteDialog";
+import { usePermanentDelete } from "../../hooks/usePermanentDelete";
 import ClientSelect from "../../components/ClientSelect";
 import { listClients } from "../../services/clientService";
-import { archiveProject, createProject, listProjects, type ProjectInput } from "../../services/projectService";
+import { checkProjectDeletable, deleteProjectPermanently, archiveProject, createProject, listProjects, type ProjectInput } from "../../services/projectService";
 import type { Project, ProjectStatus } from "../../types/referenceData";
 
 export default function ProjectsPage() {
@@ -31,13 +34,15 @@ export default function ProjectsPage() {
   const [search, setSearch] = useState("");
   const [clientFilter, setClientFilter] = useState<number | "">("");
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | "">("");
+  const [startDateFrom, setStartDateFrom] = useState("");
+  const [startDateTo, setStartDateTo] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmTarget, setConfirmTarget] = useState<Project | null>(null);
   const [confirmErrorMessage, setConfirmErrorMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["projects", page, pageSize, search, clientFilter, statusFilter],
+    queryKey: ["projects", page, pageSize, search, clientFilter, statusFilter, startDateFrom, startDateTo],
     queryFn: () =>
       listProjects({
         page,
@@ -45,6 +50,8 @@ export default function ProjectsPage() {
         search: search || undefined,
         client_id: clientFilter || undefined,
         status: statusFilter || undefined,
+        start_date_from: startDateFrom || undefined,
+        start_date_to: startDateTo || undefined,
       }),
   });
 
@@ -83,6 +90,16 @@ export default function ProjectsPage() {
     setModalOpen(true);
   };
 
+  // Task 5 — permanent deletion, deliberately separate from the
+  // deactivate/archive flow (different dialog, icon and colour).
+  const permanentDelete = usePermanentDelete<Project>({
+    invalidateKey: "projects",
+    check: checkProjectDeletable,
+    remove: deleteProjectPermanently,
+    getName: (p) => p.project_name,
+    getId: (p) => p.id,
+  });
+
   const columns: DataTableColumn<Project>[] = [
     { key: "name", label: "Project Name", render: (p) => p.project_name },
     { key: "client", label: "Client", render: (p) => clientNameById.get(p.client_id) ?? `#${p.client_id}` },
@@ -99,16 +116,22 @@ export default function ProjectsPage() {
       key: "actions",
       label: "Actions",
       align: "right",
-      render: (p) =>
-        p.status === "active" ? (
-          <Tooltip title="Archive">
-            <IconButton size="small" onClick={() => { setConfirmErrorMessage(null); setConfirmTarget(p); }}>
-              <ArchiveIcon fontSize="small" />
+      render: (p) => (
+        <Stack direction="row" spacing={0.5} sx={{ justifyContent: "flex-end" }}>
+          {p.status === "active" && (
+            <Tooltip title="Archive (keeps history)">
+              <IconButton size="small" onClick={() => { setConfirmErrorMessage(null); setConfirmTarget(p); }}>
+                <ArchiveIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          <Tooltip title="Delete permanently">
+            <IconButton size="small" color="error" onClick={() => permanentDelete.start(p)}>
+              <DeleteForeverIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-        ) : (
-          "—"
-        ),
+        </Stack>
+      ),
     },
   ];
 
@@ -152,6 +175,22 @@ export default function ProjectsPage() {
           <MenuItem value="active">Active</MenuItem>
           <MenuItem value="archived">Archived</MenuItem>
         </TextField>
+        <TextField
+          size="small"
+          type="date"
+          label="Start From"
+          slotProps={{ inputLabel: { shrink: true } }}
+          value={startDateFrom}
+          onChange={(e) => { setStartDateFrom(e.target.value); setPage(1); }}
+        />
+        <TextField
+          size="small"
+          type="date"
+          label="Start To"
+          slotProps={{ inputLabel: { shrink: true } }}
+          value={startDateTo}
+          onChange={(e) => { setStartDateTo(e.target.value); setPage(1); }}
+        />
       </Stack>
 
       {isError && (
@@ -228,6 +267,18 @@ export default function ProjectsPage() {
         errorMessage={confirmErrorMessage}
         onConfirm={() => confirmTarget && archiveMutation.mutate(confirmTarget)}
         onCancel={() => { setConfirmTarget(null); setConfirmErrorMessage(null); }}
+      />
+
+      <PermanentDeleteDialog
+        open={permanentDelete.open}
+        entityNoun="project"
+        entityName={permanentDelete.name}
+        check={permanentDelete.deletionCheck}
+        checkLoading={permanentDelete.checkLoading}
+        loading={permanentDelete.loading}
+        errorMessage={permanentDelete.errorMessage}
+        onConfirm={permanentDelete.confirm}
+        onCancel={permanentDelete.cancel}
       />
     </Box>
   );

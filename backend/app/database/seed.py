@@ -29,6 +29,7 @@ from app.models import (
     InterventionTask,
     Notification,
     Planning,
+    PointRule,
     Project,
     Role,
     Travail,
@@ -56,6 +57,20 @@ MOROCCAN_CITIES = [
     "Agadir", "Casablanca", "Rabat", "Marrakech", "Fes", "Tangier", "Meknes",
     "Oujda", "Kenitra", "Tetouan", "Safi", "Mohammedia", "El Jadida", "Beni Mellal",
     "Nador", "Taza", "Settat", "Khemisset", "Larache", "Guelmim",
+]
+
+# Task 2 — the Administrator-editable default point-rule configuration,
+# reproducing the original Ch.28 hardcoded windows exactly (see
+# `business_logic_service.calculate_points()`). Stored as a plain 3-tuple
+# list (not the ORM model) so this file has zero import-time dependency on
+# `point_rule_service` — the seed script only ever needs to build rows, never
+# to evaluate or validate them. `end_time=time(0, 0)` for the last rule is
+# the documented midnight-crossing representation (22:00 up to but not
+# including the next day's 00:00).
+DEFAULT_POINT_RULES: list[tuple[time, time, int]] = [
+    (time(17, 0), time(19, 0), 5),
+    (time(19, 0), time(22, 0), 2),
+    (time(22, 0), time(0, 0), 1),
 ]
 
 TRAVAUX_CATALOG = [
@@ -126,17 +141,76 @@ def _points_for_submission(submission_dt: datetime) -> int:
 def seed_roles(db: Session) -> dict[str, Role]:
     from app.models.role import RoleName
 
+    # Skips any role that already exists (rather than blindly inserting one
+    # per enum member) because `seed_display_role_and_account` — called
+    # earlier in `run()`, independently of this function's own idempotency —
+    # may have already created the `display` row on a fresh database; without
+    # this check, this loop would attempt a second INSERT for it and violate
+    # `roles.name`'s uniqueness constraint.
+    existing = {r.name: r for r in db.query(Role).all()}
     roles = {}
     for role_name in RoleName:
-        role = Role(name=role_name)
-        db.add(role)
+        role = existing.get(role_name)
+        if role is None:
+            role = Role(name=role_name)
+            db.add(role)
         roles[role_name.value] = role
     db.flush()
     return roles
 
 
+def seed_point_rules(db: Session) -> list[PointRule]:
+    """Task 2 — the initial Administrator-editable configuration. Guarded
+    independently of the outer `run()` idempotency check (which only looks at
+    `roles`) so an Administrator's own rule edits are never silently
+    overwritten by a later seed re-run against the same database."""
+    if db.query(PointRule).count() > 0:
+        return []
+    rules = [PointRule(start_time=start, end_time=end, points=points) for start, end, points in DEFAULT_POINT_RULES]
+    db.add_all(rules)
+    db.flush()
+    return rules
+
+
+def seed_display_role_and_account(db: Session) -> None:
+    """Task 3 — the single source of truth for the `display` role row and
+    the seeded `display01` account (`seed_roles()`/`seed_users()` below both
+    defer to whatever this function has already created, rather than
+    creating their own copies, to avoid a duplicate-insert unique-constraint
+    violation on a fresh database). Called unconditionally at the top of
+    `run()`, before the roles-count guard, so it also backfills both rows
+    onto a database that was already fully seeded before this role existed
+    — the committed `dev.db` predates it, exactly like Task 2's
+    `point_rules` backfill situation. Independently idempotent per row
+    (checked separately), so it's safe to call on every boot regardless of
+    which of the two states the database is actually in."""
+    from app.models.role import RoleName
+
+    role = db.query(Role).filter(Role.name == RoleName.DISPLAY).first()
+    if role is None:
+        role = Role(name=RoleName.DISPLAY)
+        db.add(role)
+        db.flush()
+
+    existing_account = db.query(User).filter(User.username == "display01").first()
+    if existing_account is None:
+        db.add(
+            User(
+                first_name="Hallway",
+                last_name="Display",
+                username="display01",
+                password_hash=hash_password("Password123!"),
+                email="display01@bims.local",
+                role=role,
+                active=True,
+            )
+        )
+        db.flush()
+
+
 def seed_users(db: Session, roles: dict[str, Role]) -> dict[str, list[User]]:
-    """Ch.51: 10 Technicians, 2 Chef des Techniciens, 2 Administration Supervisors."""
+    """Ch.51: 10 Technicians, 2 Chef des Techniciens, 2 Administration
+    Supervisors, plus Task 3's single hallway-display account."""
 
     def make_user(first: str, last: str, username: str, role: Role) -> User:
         user = User(
@@ -167,8 +241,17 @@ def seed_users(db: Session, roles: dict[str, Role]) -> dict[str, list[User]]:
         first, last = fake.first_name(), fake.last_name()
         admins.append(make_user(first, last, f"admin{i:02d}", roles["admin_supervisor"]))
 
+    # Task 3's single hallway-display account is created by
+    # `seed_display_role_and_account`, which `run()` always calls before
+    # this function — not here, since duplicating that creation would
+    # violate `users.username`'s uniqueness constraint on a fresh database
+    # (where that earlier call has already inserted it). Queried back
+    # (rather than re-created) purely so the caller gets a consistent
+    # {"technicians": ..., "displays": ...} shape either way.
+    displays = list(db.query(User).filter(User.username == "display01").all())
+
     db.flush()
-    return {"technicians": technicians, "chefs": chefs, "admins": admins}
+    return {"technicians": technicians, "chefs": chefs, "admins": admins, "displays": displays}
 
 
 def seed_clients_and_sites(db: Session) -> tuple[list[Client], list[ClientSite]]:
@@ -561,7 +644,37 @@ def seed_notifications(
 def run() -> None:
     db = SessionLocal()
     try:
-        if db.query(Role).count() > 0:
+        # This check must happen BEFORE any of the independent backfill
+        # steps below (point rules, display role/account) — each of those
+        # inserts a row (a Role, in the display case) that would otherwise
+        # make a genuinely fresh, empty database look "already seeded" to
+        # this exact check, permanently short-circuiting the rest of this
+        # function (roles/users/clients/.../interventions) on every single
+        # first run. Captured once, up front, as `is_fresh_database`.
+        is_fresh_database = db.query(Role).count() == 0
+
+        # Point rules are seeded independently of the outer roles-based guard
+        # below (and have their own separate idempotency check inside
+        # `seed_point_rules`): the roles guard exists to protect the
+        # synthetic *demo* dataset from being regenerated, but the committed
+        # `dev.db` predates the point_rules table entirely, so gating this on
+        # `roles` would leave every pre-existing deployment permanently
+        # without any usable default rules after this upgrade — this call is
+        # what backfills them, once, the first time this code runs against
+        # such a database; it is then just as protected against re-seeding
+        # as everything else, including any Administrator's own edits.
+        print("Seeding default point rules (if not already configured)...")
+        seed_point_rules(db)
+        db.commit()
+
+        # Same backfill rationale as point rules above — the committed
+        # `dev.db` predates the `display` role entirely, so an already-seeded
+        # database would otherwise never gain it (or its demo account).
+        print("Seeding display role and account (if not already configured)...")
+        seed_display_role_and_account(db)
+        db.commit()
+
+        if not is_fresh_database:
             print("Database already seeded (roles table is non-empty) — skipping.")
             return
 
@@ -611,7 +724,8 @@ def run() -> None:
         db.commit()
         print(
             f"Seed complete: {len(users['technicians'])} technicians, {len(users['chefs'])} chefs, "
-            f"{len(users['admins'])} admins, {len(clients)} clients, {len(sites)} sites, "
+            f"{len(users['admins'])} admins, {len(users['displays'])} display account(s), "
+            f"{len(clients)} clients, {len(sites)} sites, "
             f"{len(contracts)} contracts, {len(projects)} projects, {len(travaux)} travaux, "
             f"{len(interventions)} interventions."
         )

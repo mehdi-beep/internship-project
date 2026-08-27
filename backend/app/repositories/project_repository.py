@@ -1,3 +1,5 @@
+from datetime import date
+
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
@@ -5,12 +7,22 @@ from app.models.project import Project
 from app.models.enums import ProjectStatus
 
 
-def list_query(client_id: int | None, status_filter: ProjectStatus | None, search: str | None) -> Select:
+def list_query(
+    client_id: int | None,
+    status_filter: ProjectStatus | None,
+    search: str | None,
+    start_date_from: date | None = None,
+    start_date_to: date | None = None,
+) -> Select:
     stmt = select(Project)
     if client_id is not None:
         stmt = stmt.where(Project.client_id == client_id)
     if status_filter is not None:
         stmt = stmt.where(Project.status == status_filter)
+    if start_date_from is not None:
+        stmt = stmt.where(Project.start_date >= start_date_from)
+    if start_date_to is not None:
+        stmt = stmt.where(Project.start_date <= start_date_to)
     if search:
         stmt = stmt.where(Project.project_name.ilike(f"%{search}%"))
     return stmt.order_by(Project.project_name)
@@ -41,3 +53,11 @@ def set_status(db: Session, project: Project, status_value: ProjectStatus) -> Pr
     db.commit()
     db.refresh(project)
     return project
+
+
+def delete(db: Session, project: Project) -> None:
+    """Hard delete. Callers MUST run deletion_service.ensure_deletable first —
+    the model's foreign keys are ON DELETE RESTRICT by design, so this is only
+    ever reached for a row nothing references."""
+    db.delete(project)
+    db.commit()

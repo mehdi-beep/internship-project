@@ -16,8 +16,7 @@ import {
 } from "@mui/material";
 import StatTile from "../../components/StatTile";
 import ChartCard from "../../components/ChartCard";
-import SimpleBarChart from "../../components/SimpleBarChart";
-import SimpleLineChart from "../../components/SimpleLineChart";
+import SwitchableChartCard from "../../components/SwitchableChartCard";
 import QueryStateGate from "../../components/QueryStateGate";
 import PeriodModeSelector, { type PeriodMode } from "../../components/PeriodModeSelector";
 import { getTechnicianDashboard, getTechnicianDashboardCharts } from "../../services/dashboardService";
@@ -99,14 +98,15 @@ function TechnicianDashboardBody({ data }: { data: TechnicianDashboard }) {
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
-          <ChartCard title="Completed Interventions">
-            <SimpleBarChart data={charts?.completed_chart ?? []} colorIndex={0} />
-          </ChartCard>
+          <SwitchableChartCard title="Completed Interventions" data={charts?.completed_chart ?? []} colorIndex={0} />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <ChartCard title="Points Earned">
-            <SimpleLineChart data={charts?.points_chart ?? []} colorIndex={3} />
-          </ChartCard>
+          <SwitchableChartCard
+            title="Points Earned"
+            data={charts?.points_chart ?? []}
+            colorIndex={3}
+            defaultType="line"
+          />
         </Grid>
       </Grid>
 

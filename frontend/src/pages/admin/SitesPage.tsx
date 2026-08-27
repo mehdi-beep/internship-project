@@ -4,6 +4,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   IconButton,
   MenuItem,
   Stack,
@@ -16,17 +17,23 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/EditOutlined";
 import BlockIcon from "@mui/icons-material/BlockOutlined";
 import CheckCircleIcon from "@mui/icons-material/CheckCircleOutlined";
+import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
 import { Controller, useForm } from "react-hook-form";
 import DataTable, { type DataTableColumn } from "../../components/DataTable";
 import SearchBar from "../../components/SearchBar";
 import Modal from "../../components/Modal";
 import ConfirmationDialog from "../../components/ConfirmationDialog";
+import PermanentDeleteDialog from "../../components/PermanentDeleteDialog";
+import { usePermanentDelete } from "../../hooks/usePermanentDelete";
 import ClientSelect from "../../components/ClientSelect";
 import { listClients } from "../../services/clientService";
 import {
+  checkSiteDeletable,
+  deleteSitePermanently,
   activateSite,
   createSite,
   deactivateSite,
+  listSiteCities,
   listSites,
   updateSite,
   type SiteInput,
@@ -39,6 +46,7 @@ export default function SitesPage() {
   const [pageSize, setPageSize] = useState(20);
   const [search, setSearch] = useState("");
   const [clientFilter, setClientFilter] = useState<number | "">("");
+  const [cityFilter, setCityFilter] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [editing, setEditing] = useState<ClientSite | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -47,13 +55,14 @@ export default function SitesPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["sites", page, pageSize, search, clientFilter, showInactive],
+    queryKey: ["sites", page, pageSize, search, clientFilter, cityFilter, showInactive],
     queryFn: () =>
       listSites({
         page,
         page_size: pageSize,
         search: search || undefined,
         client_id: clientFilter || undefined,
+        city: cityFilter || undefined,
         active_only: !showInactive,
       }),
   });
@@ -63,6 +72,11 @@ export default function SitesPage() {
     queryFn: () => listClients({ page_size: 100, active_only: true }),
   });
   const clientNameById = new Map((clientsData?.items ?? []).map((c) => [c.id, c.client_name]));
+
+  const { data: cities } = useQuery({
+    queryKey: ["sites", "cities"],
+    queryFn: listSiteCities,
+  });
 
   const { register, handleSubmit, reset, control, formState: { errors } } = useForm<SiteInput>();
 
@@ -118,12 +132,34 @@ export default function SitesPage() {
     }
   };
 
+  // Task 5 — permanent deletion, deliberately separate from the
+  // deactivate/archive flow (different dialog, icon and colour).
+  const permanentDelete = usePermanentDelete<ClientSite>({
+    invalidateKey: "sites",
+    check: checkSiteDeletable,
+    remove: deleteSitePermanently,
+    getName: (s) => s.site_name,
+    getId: (s) => s.id,
+  });
+
   const columns: DataTableColumn<ClientSite>[] = [
     { key: "site_name", label: "Site Name", render: (s) => s.site_name },
     { key: "client", label: "Client", render: (s) => clientNameById.get(s.client_id) ?? `#${s.client_id}` },
     { key: "city", label: "City", render: (s) => s.city },
     { key: "address", label: "Address", render: (s) => s.address ?? "—" },
-    { key: "status", label: "Status", render: (s) => (s.active ? "Active" : "Inactive") },
+    {
+      key: "status",
+      label: "Status",
+      // Task 5 — inactive state must be unmistakable, not plain text.
+      render: (s) => (
+        <Chip
+          size="small"
+          label={s.active ? "Active" : "Inactive"}
+          color={s.active ? "success" : "default"}
+          variant={s.active ? "filled" : "outlined"}
+        />
+      ),
+    },
     {
       key: "actions",
       label: "Actions",
@@ -135,9 +171,14 @@ export default function SitesPage() {
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title={s.active ? "Deactivate" : "Activate"}>
+          <Tooltip title={s.active ? "Deactivate (keeps history)" : "Activate"}>
             <IconButton size="small" onClick={() => { setConfirmErrorMessage(null); setConfirmTarget(s); }}>
               {s.active ? <BlockIcon fontSize="small" /> : <CheckCircleIcon fontSize="small" />}
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete permanently">
+            <IconButton size="small" color="error" onClick={() => permanentDelete.start(s)}>
+              <DeleteForeverIcon fontSize="small" />
             </IconButton>
           </Tooltip>
         </Stack>
@@ -170,6 +211,21 @@ export default function SitesPage() {
           {(clientsData?.items ?? []).map((c) => (
             <MenuItem key={c.id} value={c.id}>
               {c.client_name}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="City"
+          value={cityFilter}
+          onChange={(e) => { setCityFilter(e.target.value); setPage(1); }}
+          sx={{ minWidth: 160 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          {(cities ?? []).map((city) => (
+            <MenuItem key={city} value={city}>
+              {city}
             </MenuItem>
           ))}
         </TextField>
@@ -249,11 +305,24 @@ export default function SitesPage() {
             : `Reactivate "${confirmTarget?.site_name}"?`
         }
         confirmLabel={confirmTarget?.active ? "Deactivate" : "Activate"}
-        confirmColor={confirmTarget?.active ? "error" : "primary"}
+        // Task 5 — amber, not red: red is reserved for permanent deletion.
+        confirmColor={confirmTarget?.active ? "warning" : "primary"}
         loading={toggleActiveMutation.isPending}
         errorMessage={confirmErrorMessage}
         onConfirm={() => confirmTarget && toggleActiveMutation.mutate(confirmTarget)}
         onCancel={() => { setConfirmTarget(null); setConfirmErrorMessage(null); }}
+      />
+
+      <PermanentDeleteDialog
+        open={permanentDelete.open}
+        entityNoun="client site"
+        entityName={permanentDelete.name}
+        check={permanentDelete.deletionCheck}
+        checkLoading={permanentDelete.checkLoading}
+        loading={permanentDelete.loading}
+        errorMessage={permanentDelete.errorMessage}
+        onConfirm={permanentDelete.confirm}
+        onCancel={permanentDelete.cancel}
       />
     </Box>
   );
