@@ -36,3 +36,10 @@ Thumbs.db
 /ARCHITECTURE.md
 /my_contribution/
 /future_ai_validation/
+
+# All the above now live inside additions/ (moved 2026-08-27), along with
+# other root-level docs and 2 confirmed-dead frontend components — see
+# additions/CLEANUP_LOG.md. This one rule keeps the whole folder untracked
+# going forward. The two earlier commits that added it are unaffected;
+# per explicit instruction, git history was not rewritten to remove them.
+/additions/
