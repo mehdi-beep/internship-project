@@ -2,7 +2,7 @@
 
 Digital replacement for the company's paper-based intervention workflow.
 
-**Status:** Phases 1–10 complete (Init, Database, Auth, Reference Data, Planning, Interventions, Business Logic, Approvals, Dashboards & Reporting, Testing & Cleanup), plus six post-launch tasks: configurable search/filters (Task 1), Administrator-configurable point rules (Task 2), a read-only hallway-display role with a live-updating global calendar (Task 3), assigned-intervention notifications with optional email/WhatsApp channels (Task 4), deactivation and permanent deletion for reference-data entities (Task 5), and permanent deletion for Users with full history preservation (Task 6). See "Post-Launch Tasks" below for what each one actually changed.
+**Status:** Phases 1–10 complete (Init, Database, Auth, Reference Data, Planning, Interventions, Business Logic, Approvals, Dashboards & Reporting, Testing & Cleanup), plus eight post-launch tasks: configurable search/filters (Task 1), Administrator-configurable point rules (Task 2), a read-only hallway-display role with a live-updating global calendar (Task 3), assigned-intervention notifications with optional email/WhatsApp channels (Task 4), deactivation and permanent deletion for reference-data entities (Task 5), permanent deletion for Users with full history preservation (Task 6), a CEO role with exclusive Admin-management power (Task 7), and login by username-or-email plus self-service password reset (Task 8). See "Post-Launch Tasks" below for what each one actually changed.
 
 > Several reference documents (the original SRS, phased task breakdown, full data model, API contracts, notification setup, and Postgres-migration notes) live in a local-only `additions/` folder that is intentionally not part of this repository on GitHub — see "Project Documentation" below for what's still available and where.
 
@@ -161,7 +161,7 @@ cd backend
 python -m app.database.seed
 ```
 
-This populates the database with realistic synthetic data simulating several months of company activity: 10 technicians, 2 Chef des Techniciens, 2 Administration Supervisors, 1 read-only Display account (Task 3), 20+ clients, 50+ client sites, 25+ contracts, 15+ projects, 125 travaux catalog entries, 500+ interventions across every lifecycle status (including warranty interventions referencing real prior BI numbers), 200+ planning records, 300+ notifications, 3 default point rules (Task 2 — see below), and full approval/audit history.
+This populates the database with realistic synthetic data simulating several months of company activity: 10 technicians, 2 Chef des Techniciens, 2 Administration Supervisors, 1 read-only Display account (Task 3), 1 CEO account (Task 7), 20+ clients, 50+ client sites, 25+ contracts, 15+ projects, 125 travaux catalog entries, 500+ interventions across every lifecycle status (including warranty interventions referencing real prior BI numbers), 200+ planning records, 300+ notifications, 3 default point rules (Task 2 — see below), and full approval/audit history.
 
 The script is idempotent — re-running it against an already-seeded database is a no-op (it checks whether the `roles` table is empty first).
 
@@ -170,6 +170,9 @@ The script is idempotent — re-running it against an already-seeded database is
 - Chef des Techniciens: `chef01`, `chef02`
 - Administration Supervisors: `admin01`, `admin02`
 - Display (read-only hallway calendar, Task 3): `display01`
+- CEO (Task 7 — the one account above Admin): `ceo01`
+
+Every seeded account can also log in with its email instead of its username (Task 8) — e.g. `ceo01@bims.local` works wherever `ceo01` does.
 
 > The committed `backend/dev.db` file additionally contains 58 real company travaux (technical-operation codes/names, added directly through the Travaux admin screen rather than the seed script) on top of the 125 synthetic ones above, for a live total of 183. Running `python -m app.database.seed` against a *fresh* empty database reproduces only the 125 synthetic entries — the 58 real ones are specific to the already-seeded `dev.db` file shipped in this repo, not something the seed script itself generates.
 
@@ -183,7 +186,7 @@ Starts Postgres, backend (with hot reload), and frontend (with hot reload) toget
 
 ## Running Tests
 
-The backend has a permanent pytest suite (259 tests) covering authentication, business logic (duration/point calculation, status transitions), planning, interventions, approvals, reference-data CRUD, dashboards, reports, technician performance, configurable point rules (Task 2), the read-only display role (Task 3), assignment notifications (Task 4), and deactivation/permanent deletion (Task 5 and Task 6):
+The backend has a permanent pytest suite (259 tests) covering authentication (including login by username or email, and self-service password reset — Task 8), business logic (duration/point calculation, status transitions), planning, interventions, approvals, reference-data CRUD, dashboards, reports, technician performance, configurable point rules (Task 2), the read-only display role (Task 3), assignment notifications (Task 4), deactivation/permanent deletion (Task 5 and Task 6), and the CEO role's exclusive Admin-management power (Task 7):
 
 ```bash
 cd backend
@@ -272,6 +275,21 @@ The mechanism is different from Task 5's plain detach, because a deleted user ha
 ### Permission model across Tasks 5 and 6
 
 All of the above — deactivation, permanent deletion, and the pre-flight `/deletion-check` — is **Administrator-only**, enforced in the backend (`require_roles("admin_supervisor")`) as well as the UI, for every entity. The UI keeps the two operations unmistakable: deactivate is an amber circle-slash icon with a plain confirmation; permanent deletion is a red trash icon opening a distinct red dialog that lists what will be affected and requires **typing the record's name** to arm the delete button.
+
+### Task 7 — CEO Role
+
+A 5th role, `ceo`, sits above Administration Supervisor: **exactly one CEO account can ever exist** (enforced in `user_service._ensure_single_ceo`, checked at creation, not just assumed from the seed script). Everywhere a route required `admin_supervisor`, it now accepts `ceo` too, so the CEO can do everything an Administrator can. The CEO's one exclusive power is the reverse of that: **only the CEO can create, edit, deactivate, or permanently delete an Administrator or the CEO account itself** — a regular Administrator gets 403 attempting any of those against another Admin or the CEO (`user_service._ensure_can_manage_role`). The CEO account is also immune to both deactivation and permanent deletion, unconditionally, including by itself.
+
+- Migration: `backend/alembic/versions/4bc2260af366_add_ceo_role.py`
+- Seeded account: `ceo01` (see "Seeded login credentials" above)
+
+### Task 8 — Login by Username or Email, and Self-Service Password Reset
+
+`POST /auth/login` now accepts either a username or an email address in the same field — `auth_service.authenticate()` tries a username lookup first, falling back to email only if that fails, so nobody's existing login habit changes.
+
+Alongside that, any authenticated user can now reset their own password without an Administrator: `GET /auth/password-reset/availability`, `POST /auth/password-reset/request`, and `POST /auth/password-reset/confirm` (all in `backend/app/services/password_reset_service.py` and `backend/app/api/auth.py`) implement a two-step, code-based flow that always acts on the caller's own account, never a target user id. Requesting a reset emails a 6-digit code (bcrypt-hashed at rest, never stored raw, 10-minute expiry, single-use) to the user's on-file address via the existing Task 4 `delivery_service` — no second email system. If email isn't configured, the request fails loudly with a 409 rather than pretending to succeed, since a silent failure here would leave someone locked out with no explanation.
+
+- Migration: `backend/alembic/versions/a2159ec5c6ae_add_password_reset_codes.py`
 
 ## Project Documentation
 
