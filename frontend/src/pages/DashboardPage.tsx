@@ -11,7 +11,9 @@ type DashboardMode = "global" | "technician-performance";
 export default function DashboardPage() {
   const { user } = useAuth();
   const [mode, setMode] = useState<DashboardMode>("global");
-  const canToggle = user?.role === "chef_technicien" || user?.role === "admin_supervisor";
+  // Task 7 — the CEO sees exactly what an Administrator sees on this page,
+  // same as everywhere else in the app.
+  const canToggle = user?.role === "chef_technicien" || user?.role === "admin_supervisor" || user?.role === "ceo";
 
   return (
     <>
@@ -33,7 +35,8 @@ export default function DashboardPage() {
       </Stack>
       {user?.role === "technician" && <TechnicianDashboardContent />}
       {user?.role === "chef_technicien" && (mode === "global" ? <ChefDashboardContent /> : <TechnicianPerformanceDashboardContent />)}
-      {user?.role === "admin_supervisor" && (mode === "global" ? <AdminDashboardContent /> : <TechnicianPerformanceDashboardContent />)}
+      {(user?.role === "admin_supervisor" || user?.role === "ceo") &&
+        (mode === "global" ? <AdminDashboardContent /> : <TechnicianPerformanceDashboardContent />)}
     </>
   );
 }

@@ -21,7 +21,7 @@ from app.services import intervention_service
 
 router = APIRouter(prefix="/interventions", tags=["interventions"])
 
-ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor")
+ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor", "ceo")
 
 
 def _is_privileged(user: User) -> bool:

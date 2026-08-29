@@ -60,7 +60,7 @@ def supervisor_dashboard_charts(
 @router.get("/admin", response_model=ApiResponse[AdminDashboard])
 def admin_dashboard(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[AdminDashboard]:
     return ApiResponse(data=dashboard_service.get_admin_dashboard(db))
 
@@ -70,6 +70,6 @@ def admin_dashboard_charts(
     mode: PeriodMode = Query(...),
     anchor: date = Query(...),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[AdminDashboardCharts]:
     return ApiResponse(data=dashboard_service.get_admin_dashboard_charts(db, mode, anchor))

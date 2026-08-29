@@ -14,7 +14,7 @@ from app.services import deletion_service, project_service
 
 router = APIRouter(tags=["projects"])
 
-ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor")
+ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor", "ceo")
 
 
 def _to_page(result) -> Page[ProjectOut]:
@@ -71,7 +71,7 @@ def get_project(
 def create_project(
     payload: ProjectCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[ProjectOut]:
     project = project_service.create_project(db, payload)
     return ApiResponse(message="Project created.", data=ProjectOut.model_validate(project))
@@ -82,7 +82,7 @@ def update_project(
     project_id: int,
     payload: ProjectUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[ProjectOut]:
     project = project_service.update_project(db, project_id, payload)
     return ApiResponse(message="Project updated.", data=ProjectOut.model_validate(project))
@@ -92,7 +92,7 @@ def update_project(
 def archive_project(
     project_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[ProjectOut]:
     project = project_service.archive_project(db, project_id)
     return ApiResponse(message="Project archived.", data=ProjectOut.model_validate(project))
@@ -102,7 +102,7 @@ def archive_project(
 def check_project_deletable(
     project_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[dict]:
     """Task 5 — lets the UI warn the Administrator *before* they confirm a
     permanent deletion, instead of only failing afterwards."""
@@ -119,7 +119,7 @@ def check_project_deletable(
 def delete_project_permanently(
     project_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[None]:
     """Task 5 — PERMANENT hard delete (admin only). Refused with 409 if any
     record still references this row; historical data is never cascaded."""

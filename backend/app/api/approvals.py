@@ -16,7 +16,7 @@ router = APIRouter(tags=["approvals"])
 @router.get("/approvals/my-recent-decisions", response_model=ApiResponse[list[RecentApprovalDecision]])
 def my_recent_decisions(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("chef_technicien", "admin_supervisor")),
+    current_user: User = Depends(require_roles("chef_technicien", "admin_supervisor", "ceo")),
 ) -> ApiResponse[list[RecentApprovalDecision]]:
     return ApiResponse(data=approval_service.list_my_recent_decisions(db, current_user.id))
 
@@ -45,7 +45,7 @@ def list_administrative_pending(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[Page[InterventionOut]]:
     result = approval_service.list_administrative_pending(db, page, page_size)
     return ApiResponse(
@@ -76,7 +76,7 @@ def administrative_approval(
     intervention_id: int,
     payload: ApprovalDecisionInput,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin_supervisor")),
+    current_user: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[InterventionDetailOut]:
     intervention = approval_service.decide_administrative_approval(db, intervention_id, payload, current_user.id)
     message = "Administrative approval completed." if payload.decision.value == "approved" else "Intervention rejected."

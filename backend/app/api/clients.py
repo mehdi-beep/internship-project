@@ -11,7 +11,7 @@ from app.services import deletion_service, client_service
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
-ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor")
+ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor", "ceo")
 
 
 @router.get("", response_model=ApiResponse[Page[ClientOut]])
@@ -42,7 +42,7 @@ def get_client(
 def create_client(
     payload: ClientCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[ClientOut]:
     client = client_service.create_client(db, payload)
     return ApiResponse(message="Client created.", data=ClientOut.model_validate(client))
@@ -53,7 +53,7 @@ def update_client(
     client_id: int,
     payload: ClientUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[ClientOut]:
     client = client_service.update_client(db, client_id, payload)
     return ApiResponse(message="Client updated.", data=ClientOut.model_validate(client))
@@ -63,7 +63,7 @@ def update_client(
 def deactivate_client(
     client_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[ClientOut]:
     client = client_service.deactivate_client(db, client_id)
     return ApiResponse(message="Client deactivated.", data=ClientOut.model_validate(client))
@@ -73,7 +73,7 @@ def deactivate_client(
 def activate_client(
     client_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[ClientOut]:
     client = client_service.activate_client(db, client_id)
     return ApiResponse(message="Client reactivated.", data=ClientOut.model_validate(client))
@@ -83,7 +83,7 @@ def activate_client(
 def check_client_deletable(
     client_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[dict]:
     """Task 5 — lets the UI warn the Administrator *before* they confirm a
     permanent deletion, instead of only failing afterwards."""
@@ -100,7 +100,7 @@ def check_client_deletable(
 def delete_client_permanently(
     client_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[None]:
     """Task 5 — PERMANENT hard delete (admin only). Refused with 409 if any
     record still references this row; historical data is never cascaded."""

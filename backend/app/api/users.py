@@ -21,7 +21,7 @@ def list_users(
     active_only: bool = True,
     search: str | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin_supervisor", "chef_technicien")),
+    current_user: User = Depends(require_roles("admin_supervisor", "chef_technicien", "ceo")),
 ) -> ApiResponse[Page[UserOut]]:
     # Ch.12 — Chef des Techniciens may only view technicians, not manage users.
     if current_user.role.name == RoleName.CHEF_TECHNICIEN:
@@ -45,7 +45,7 @@ def list_users(
 def list_technician_options(
     search: str | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("technician", "chef_technicien", "admin_supervisor")),
+    _: User = Depends(require_roles("technician", "chef_technicien", "admin_supervisor", "ceo")),
 ) -> ApiResponse[list[TechnicianOptionOut]]:
     # A lightweight, all-roles-accessible lookup for colleague-technician pickers
     # (Ch.22 Section F) — unlike GET /users, this is intentionally reachable by a
@@ -57,7 +57,7 @@ def list_technician_options(
 @router.get("/chefs", response_model=ApiResponse[list[TechnicianOptionOut]])
 def list_chef_options(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("chef_technicien", "admin_supervisor")),
+    _: User = Depends(require_roles("chef_technicien", "admin_supervisor", "ceo")),
 ) -> ApiResponse[list[TechnicianOptionOut]]:
     # A lightweight lookup of active Chef des Techniciens, used to display the
     # "Supervising Role" section on the Technician Profile page — reachable by
@@ -71,7 +71,7 @@ def list_chef_options(
 def get_user(
     user_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[UserOut]:
     user = user_service.get_user(db, user_id)
     return ApiResponse(data=UserOut.from_model(user))
@@ -81,9 +81,9 @@ def get_user(
 def create_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    current_user: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[UserOut]:
-    user = user_service.create_user(db, payload)
+    user = user_service.create_user(db, payload, current_user.role.name)
     return ApiResponse(message="User created.", data=UserOut.from_model(user))
 
 
@@ -92,9 +92,9 @@ def update_user(
     user_id: int,
     payload: UserUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    current_user: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[UserOut]:
-    user = user_service.update_user(db, user_id, payload)
+    user = user_service.update_user(db, user_id, payload, current_user.role.name)
     return ApiResponse(message="User updated.", data=UserOut.from_model(user))
 
 
@@ -102,9 +102,9 @@ def update_user(
 def activate_user(
     user_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    current_user: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[UserOut]:
-    user = user_service.activate_user(db, user_id)
+    user = user_service.activate_user(db, user_id, current_user.role.name)
     return ApiResponse(message="User activated.", data=UserOut.from_model(user))
 
 
@@ -112,9 +112,9 @@ def activate_user(
 def deactivate_user(
     user_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    current_user: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[UserOut]:
-    user = user_service.deactivate_user(db, user_id)
+    user = user_service.deactivate_user(db, user_id, current_user.role.name)
     return ApiResponse(message="User deactivated.", data=UserOut.from_model(user))
 
 
@@ -123,9 +123,9 @@ def reset_password(
     user_id: int,
     payload: PasswordReset,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    current_user: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[UserOut]:
-    user = user_service.reset_password(db, user_id, payload)
+    user = user_service.reset_password(db, user_id, payload, current_user.role.name)
     return ApiResponse(message="Password reset.", data=UserOut.from_model(user))
 
 
@@ -133,14 +133,21 @@ def reset_password(
 def check_user_deletable(
     user_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[dict]:
     """Task 5 — lets the UI warn the Administrator *before* they confirm a
     permanent deletion, instead of only failing afterwards."""
+    target = user_service.get_user(db, user_id)
     blockers = deletion_service.check_deletable(db, "user", user_id)
+    # The CEO is the one specific row (not an entire entity type — every
+    # other user is genuinely deletable per Task 6) that's hard-blocked, so
+    # is_deletable's generic per-entity-type answer is overridden here rather
+    # than inside is_deletable itself, which has no way to see which
+    # specific row is being asked about.
+    deletable = False if target.role.name == RoleName.CEO else deletion_service.is_deletable("user", blockers)
     return ApiResponse(
         data={
-            "deletable": deletion_service.is_deletable("user", blockers),
+            "deletable": deletable,
             "blockers": [{"label": b.label, "count": b.count} for b in blockers],
         }
     )
@@ -150,9 +157,10 @@ def check_user_deletable(
 def delete_user_permanently(
     user_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    current_user: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[None]:
-    """Task 5 — PERMANENT hard delete (admin only). Refused with 409 if any
+    """Task 5/7 — PERMANENT hard delete (admin/CEO only, subject to the
+    Admin/CEO management wall in user_service). Refused with 409 if any
     record still references this row; historical data is never cascaded."""
-    user_service.delete_user_permanently(db, user_id)
+    user_service.delete_user_permanently(db, user_id, current_user.role.name)
     return ApiResponse(message="User permanently deleted.", data=None)

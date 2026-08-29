@@ -11,7 +11,7 @@ from app.services import deletion_service, travail_service
 
 router = APIRouter(prefix="/travaux", tags=["travaux"])
 
-ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor")
+ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor", "ceo")
 
 
 @router.get("", response_model=ApiResponse[Page[TravailOut]])
@@ -58,7 +58,7 @@ def get_travail(
 def create_travail(
     payload: TravailCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[TravailOut]:
     travail = travail_service.create_travail(db, payload)
     return ApiResponse(message="Travail created.", data=TravailOut.model_validate(travail))
@@ -69,7 +69,7 @@ def update_travail(
     travail_id: int,
     payload: TravailUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[TravailOut]:
     travail = travail_service.update_travail(db, travail_id, payload)
     return ApiResponse(message="Travail updated.", data=TravailOut.model_validate(travail))
@@ -79,7 +79,7 @@ def update_travail(
 def deactivate_travail(
     travail_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[TravailOut]:
     travail = travail_service.deactivate_travail(db, travail_id)
     return ApiResponse(message="Travail deactivated.", data=TravailOut.model_validate(travail))
@@ -89,7 +89,7 @@ def deactivate_travail(
 def activate_travail(
     travail_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[TravailOut]:
     travail = travail_service.activate_travail(db, travail_id)
     return ApiResponse(message="Travail reactivated.", data=TravailOut.model_validate(travail))
@@ -99,7 +99,7 @@ def activate_travail(
 def check_travail_deletable(
     travail_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[dict]:
     """Task 5 — lets the UI warn the Administrator *before* they confirm a
     permanent deletion, instead of only failing afterwards."""
@@ -116,7 +116,7 @@ def check_travail_deletable(
 def delete_travail_permanently(
     travail_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[None]:
     """Task 5 — PERMANENT hard delete (admin only). Refused with 409 if any
     record still references this row; historical data is never cascaded."""

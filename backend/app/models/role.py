@@ -16,6 +16,17 @@ class RoleName(str, enum.Enum):
     # group beyond the one purpose-built display endpoint
     # (GET /planning/display) — see app/api/planning.py.
     DISPLAY = "display"
+    # Task 7 — a single protected owner account, above Admin. Has every
+    # permission Admin has (added to require_roles(..., "ceo") wherever
+    # "admin_supervisor" already appears) plus one exclusive power: only a
+    # CEO may create, edit, deactivate, or permanently delete another Admin
+    # or the CEO account itself (see user_service.py's _ensure_can_manage_role
+    # and _ensure_single_ceo). The CEO account itself can never be
+    # deactivated or permanently deleted by anyone, including itself
+    # (deletion_service.py's _PROTECTED_ENTITIES / user_service.py's
+    # deactivate_user). Enforced at the exactly-one level in
+    # user_service.create_user, not just presented as a UI convention.
+    CEO = "ceo"
 
 
 class Role(Base):

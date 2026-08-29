@@ -19,7 +19,7 @@ import BlockIcon from "@mui/icons-material/BlockOutlined";
 import CheckCircleIcon from "@mui/icons-material/CheckCircleOutlined";
 import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
 import KeyIcon from "@mui/icons-material/KeyOutlined";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import DataTable, { type DataTableColumn } from "../../components/DataTable";
 import SearchBar from "../../components/SearchBar";
 import Modal from "../../components/Modal";
@@ -40,6 +40,7 @@ import {
 } from "../../services/userService";
 import type { UserRole } from "../../types/enums";
 import type { AppUser } from "../../types/referenceData";
+import { useAuth } from "../../context/AuthContext";
 
 const ROLE_LABELS: Record<UserRole, string> = {
   technician: "Technician",
@@ -50,7 +51,52 @@ const ROLE_LABELS: Record<UserRole, string> = {
   // Users CRUD if a second physical screen/location is ever added, rather
   // than needing a bespoke account-creation flow for one role.
   display: "Display (Hallway Calendar)",
+  // Task 7 — the single protected owner account. Present here purely for
+  // display (the CEO row's own chip, and so this Record stays exhaustively
+  // typed) — "ceo" is deliberately never offered as a selectable option in
+  // the create/edit role dropdown below (see roleOptionsFor / ROLE_OPTIONS),
+  // since a second CEO can never be created through this form or any other.
+  ceo: "CEO",
 };
+
+// The roles a given viewer is allowed to ASSIGN through the create/edit
+// form's Role dropdown — distinct from ROLE_LABELS above, which covers every
+// role that can ever be DISPLAYED (e.g. an existing CEO/Admin row still
+// needs a label even though nobody can newly assign those roles from here).
+// "ceo" is never offered as something to newly assign to someone else — the
+// one CEO account is seeded, not created via this form, and the backend's
+// own _ensure_single_ceo would refuse a second one regardless.
+// "admin_supervisor" is offered only when the current viewer IS the CEO,
+// matching the backend's _ensure_can_manage_role wall exactly (a regular
+// Admin attempting to POST a new admin_supervisor account would get 403 from
+// the API even if this dropdown somehow still showed the option, so hiding
+// it here is a genuine UX match for the real rule, not the rule itself).
+//
+// `currentRole` (the account actually being edited, undefined when creating)
+// is always included even if it wouldn't normally be offered — this is what
+// lets a CEO open their OWN account for editing (e.g. to fix a typo in their
+// name) without the Role field rendering blank/invalid because "ceo" isn't
+// in the base list. It does not make "ceo" newly assignable to anyone else;
+// selecting a DIFFERENT role for an existing CEO would still need to pass
+// the backend's own checks same as any other change.
+function roleOptionsFor(viewerRole: UserRole, currentRole?: UserRole): UserRole[] {
+  const base: UserRole[] = ["technician", "chef_technicien", "display"];
+  const options = viewerRole === "ceo" ? [...base, "admin_supervisor" as UserRole] : base;
+  if (currentRole && !options.includes(currentRole)) {
+    options.push(currentRole);
+  }
+  return options;
+}
+
+// The frontend mirror of the backend's real wall
+// (user_service._ensure_can_manage_role): true whenever `viewerRole` is not
+// CEO and `targetRole` is CEO or Admin. This is purely a UX affordance — a
+// regular Admin blocked here would ALSO be blocked by the API itself if they
+// somehow bypassed this (403), so hiding the actions here just avoids
+// showing controls that would only ever fail.
+function isRestrictedFor(viewerRole: UserRole, targetRole: UserRole): boolean {
+  return viewerRole !== "ceo" && (targetRole === "admin_supervisor" || targetRole === "ceo");
+}
 
 type FormValues = UserCreateInput;
 
@@ -60,6 +106,13 @@ function extractErrorDetail(err: unknown, fallback: string): string {
 }
 
 export default function UsersPage() {
+  const { user: currentUser } = useAuth();
+  // Falls back to "admin_supervisor" only in the type-theoretic case where
+  // this page renders before the auth context has resolved a user at all —
+  // it's already route-guarded to admin_supervisor/ceo, so in practice this
+  // is always one of those two by the time a real person sees this page.
+  const viewerRole: UserRole = currentUser?.role ?? "admin_supervisor";
+
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -87,7 +140,7 @@ export default function UsersPage() {
       }),
   });
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>();
+  const { register, control, handleSubmit, reset, formState: { errors } } = useForm<FormValues>();
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["users"] });
 
@@ -175,54 +228,74 @@ export default function UsersPage() {
     getId: (u) => u.id,
   });
 
+  // Task 7 — an Admin viewing the CEO's or another Admin's row: per explicit
+  // instruction, Name/Username/Role stay visible (so the row is still
+  // identifiable) but Email/Status/every action button show a plain
+  // "Restricted" label instead of the real value or a clickable control.
+  // The CEO viewing this same page sees every row completely normally — the
+  // wall only ever applies to a non-CEO viewer looking at a CEO/Admin row.
   const columns: DataTableColumn<AppUser>[] = [
     { key: "name", label: "Name", render: (u) => `${u.first_name} ${u.last_name}` },
     { key: "username", label: "Username", render: (u) => u.username },
-    { key: "email", label: "Email", render: (u) => u.email },
+    {
+      key: "email",
+      label: "Email",
+      render: (u) => (isRestrictedFor(viewerRole, u.role) ? <Typography color="text.disabled">Restricted</Typography> : u.email),
+    },
     { key: "role", label: "Role", render: (u) => <Chip size="small" label={ROLE_LABELS[u.role]} /> },
     {
       key: "status",
       label: "Status",
       // Task 5 — inactive state must be unmistakable, not plain text.
-      render: (u) => (
-        <Chip
-          size="small"
-          label={u.active ? "Active" : "Inactive"}
-          color={u.active ? "success" : "default"}
-          variant={u.active ? "filled" : "outlined"}
-        />
-      ),
+      render: (u) =>
+        isRestrictedFor(viewerRole, u.role) ? (
+          <Typography color="text.disabled">Restricted</Typography>
+        ) : (
+          <Chip
+            size="small"
+            label={u.active ? "Active" : "Inactive"}
+            color={u.active ? "success" : "default"}
+            variant={u.active ? "filled" : "outlined"}
+          />
+        ),
     },
     {
       key: "actions",
       label: "Actions",
       align: "right",
-      render: (u) => (
-        <Stack direction="row" spacing={0.5} sx={{ justifyContent: "flex-end" }}>
-          <Tooltip title="Edit">
-            <IconButton size="small" onClick={() => openEdit(u)}>
-              <EditIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Reset Password">
-            <IconButton size="small" onClick={() => { setResetTarget(u); setNewPassword(""); setResetErrorMessage(null); }}>
-              <KeyIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title={u.active ? "Deactivate (keeps history)" : "Activate"}>
-            <IconButton size="small" onClick={() => { setConfirmErrorMessage(null); setConfirmTarget(u); }}>
-              {u.active ? <BlockIcon fontSize="small" /> : <CheckCircleIcon fontSize="small" />}
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Delete permanently">
-            <IconButton size="small" color="error" onClick={() => permanentDelete.start(u)}>
-              <DeleteForeverIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Stack>
-      ),
+      render: (u) =>
+        isRestrictedFor(viewerRole, u.role) ? (
+          <Typography color="text.disabled" sx={{ textAlign: "right", pr: 1 }}>
+            Restricted
+          </Typography>
+        ) : (
+          <Stack direction="row" spacing={0.5} sx={{ justifyContent: "flex-end" }}>
+            <Tooltip title="Edit">
+              <IconButton size="small" onClick={() => openEdit(u)}>
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Reset Password">
+              <IconButton size="small" onClick={() => { setResetTarget(u); setNewPassword(""); setResetErrorMessage(null); }}>
+                <KeyIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={u.active ? "Deactivate (keeps history)" : "Activate"}>
+              <IconButton size="small" onClick={() => { setConfirmErrorMessage(null); setConfirmTarget(u); }}>
+                {u.active ? <BlockIcon fontSize="small" /> : <CheckCircleIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete permanently">
+              <IconButton size="small" color="error" onClick={() => permanentDelete.start(u)}>
+                <DeleteForeverIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        ),
     },
   ];
+
+  const roleOptions = roleOptionsFor(viewerRole, editing?.role);
 
   return (
     <Box>
@@ -315,13 +388,36 @@ export default function UsersPage() {
               {...register("email", { required: "Email is required" })}
             />
             <TextField label="Phone" fullWidth {...register("phone")} />
-            <TextField select label="Role" fullWidth defaultValue="technician" {...register("role", { required: true })}>
-              {Object.entries(ROLE_LABELS).map(([value, label]) => (
-                <MenuItem key={value} value={value}>
-                  {label}
-                </MenuItem>
-              ))}
-            </TextField>
+            {/* A Controller, not register(), and deliberately no
+                defaultValue: MUI's Select needs an explicit `value` prop to
+                reliably repaint its visible selection when that value
+                changes programmatically (via reset()) rather than through a
+                user click — register()'s plain ref-based binding updates
+                the underlying form state correctly but doesn't reliably
+                force MUI's Select to visually reflect it. This was the
+                second half of the same original bug: editing any user
+                always showed "Technician" in the dropdown regardless of
+                their real role. The first half (a stale defaultValue
+                permanently overriding the field) is fixed by removing
+                defaultValue entirely; this second half (the visible
+                dropdown not repainting even once the correct value reaches
+                the form) needed the field to become properly controlled,
+                the same pattern already used for the equivalent Technician
+                dropdown in PlanningPage.tsx. */}
+            <Controller
+              name="role"
+              control={control}
+              rules={{ required: true }}
+              render={({ field }) => (
+                <TextField select label="Role" fullWidth {...field}>
+                  {roleOptions.map((value) => (
+                    <MenuItem key={value} value={value}>
+                      {ROLE_LABELS[value]}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              )}
+            />
             {!editing && (
               <TextField
                 label="Password"

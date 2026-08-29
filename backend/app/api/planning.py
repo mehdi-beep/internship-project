@@ -17,7 +17,7 @@ from app.services import planning_service
 
 router = APIRouter(prefix="/planning", tags=["planning"])
 
-ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor")
+ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor", "ceo")
 
 
 class UrgentQueueReorderInput(BaseModel):
@@ -28,7 +28,7 @@ class UrgentQueueReorderInput(BaseModel):
 def reorder_urgent_queue(
     payload: UrgentQueueReorderInput,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("chef_technicien", "admin_supervisor")),
+    _: User = Depends(require_roles("chef_technicien", "admin_supervisor", "ceo")),
 ) -> ApiResponse[None]:
     planning_service.reorder_urgent_queue(db, payload.ordered_ids)
     return ApiResponse(message="Urgent queue reordered.")
@@ -46,7 +46,7 @@ def list_planning_for_display(
     # /clients and /users lookups); technician is intentionally excluded, since
     # their existing calendar is scoped to their own planning only (Ch.16)
     # and this global, all-technicians view would bypass that scoping.
-    _: User = Depends(require_roles("display", "chef_technicien", "admin_supervisor")),
+    _: User = Depends(require_roles("display", "chef_technicien", "admin_supervisor", "ceo")),
 ) -> ApiResponse[list[PlanningDisplayOut]]:
     rows = planning_service.list_planning_for_display(db, date_from, date_to)
     return ApiResponse(data=rows)
@@ -101,7 +101,7 @@ def get_planning(
 def create_planning(
     payload: PlanningCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("chef_technicien", "admin_supervisor")),
+    current_user: User = Depends(require_roles("chef_technicien", "admin_supervisor", "ceo")),
 ) -> ApiResponse[PlanningOut]:
     planning = planning_service.create_planning(db, payload, current_user.id)
     return ApiResponse(message="Planning created.", data=PlanningOut.model_validate(planning))
@@ -112,7 +112,7 @@ def update_planning(
     planning_id: int,
     payload: PlanningUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("chef_technicien", "admin_supervisor")),
+    _: User = Depends(require_roles("chef_technicien", "admin_supervisor", "ceo")),
 ) -> ApiResponse[PlanningOut]:
     planning = planning_service.update_planning(db, planning_id, payload)
     return ApiResponse(message="Planning updated.", data=PlanningOut.model_validate(planning))
@@ -122,7 +122,7 @@ def update_planning(
 def cancel_planning(
     planning_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("chef_technicien", "admin_supervisor")),
+    _: User = Depends(require_roles("chef_technicien", "admin_supervisor", "ceo")),
 ) -> ApiResponse[PlanningOut]:
     planning = planning_service.cancel_planning(db, planning_id)
     return ApiResponse(message="Planning cancelled.", data=PlanningOut.model_validate(planning))
@@ -132,7 +132,7 @@ def cancel_planning(
 def mark_urgent(
     planning_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("chef_technicien", "admin_supervisor")),
+    _: User = Depends(require_roles("chef_technicien", "admin_supervisor", "ceo")),
 ) -> ApiResponse[PlanningOut]:
     planning = planning_service.mark_urgent(db, planning_id)
     return ApiResponse(message="Marked as urgent.", data=PlanningOut.model_validate(planning))

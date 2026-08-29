@@ -44,6 +44,7 @@ const ROLE_LABELS: Record<string, string> = {
   chef_technicien: "Chef des Techniciens",
   admin_supervisor: "Administration Supervisor",
   display: "Display",
+  ceo: "CEO",
 };
 
 interface NavItem {
@@ -51,6 +52,22 @@ interface NavItem {
   icon: ReactNode;
   path: string;
 }
+
+const ADMIN_SUPERVISOR_NAV_ITEMS: NavItem[] = [
+  { label: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
+  { label: "Planning", icon: <EventNoteIcon />, path: "/planning" },
+  { label: "Interventions", icon: <AssignmentIcon />, path: "/interventions" },
+  { label: "Administrative Approvals", icon: <FactCheckIcon />, path: "/approvals/administrative" },
+  { label: "Users", icon: <GroupIcon />, path: "/admin/users" },
+  { label: "Clients", icon: <BusinessIcon />, path: "/admin/clients" },
+  { label: "Client Sites", icon: <BusinessIcon />, path: "/admin/sites" },
+  { label: "Contracts", icon: <DescriptionIcon />, path: "/admin/contracts" },
+  { label: "Projects", icon: <DescriptionIcon />, path: "/admin/projects" },
+  { label: "Travaux", icon: <BuildIcon />, path: "/admin/travaux" },
+  { label: "Point Management", icon: <MilitaryTechIcon />, path: "/admin/point-rules" },
+  { label: "Reports", icon: <BarChartIcon />, path: "/reports" },
+  { label: "Notifications", icon: <NotificationsIcon />, path: "/notifications" },
+];
 
 const NAV_ITEMS_BY_ROLE: Record<UserRole, NavItem[]> = {
   technician: [
@@ -66,21 +83,14 @@ const NAV_ITEMS_BY_ROLE: Record<UserRole, NavItem[]> = {
     { label: "Reports", icon: <BarChartIcon />, path: "/reports" },
     { label: "Notifications", icon: <NotificationsIcon />, path: "/notifications" },
   ],
-  admin_supervisor: [
-    { label: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
-    { label: "Planning", icon: <EventNoteIcon />, path: "/planning" },
-    { label: "Interventions", icon: <AssignmentIcon />, path: "/interventions" },
-    { label: "Administrative Approvals", icon: <FactCheckIcon />, path: "/approvals/administrative" },
-    { label: "Users", icon: <GroupIcon />, path: "/admin/users" },
-    { label: "Clients", icon: <BusinessIcon />, path: "/admin/clients" },
-    { label: "Client Sites", icon: <BusinessIcon />, path: "/admin/sites" },
-    { label: "Contracts", icon: <DescriptionIcon />, path: "/admin/contracts" },
-    { label: "Projects", icon: <DescriptionIcon />, path: "/admin/projects" },
-    { label: "Travaux", icon: <BuildIcon />, path: "/admin/travaux" },
-    { label: "Point Management", icon: <MilitaryTechIcon />, path: "/admin/point-rules" },
-    { label: "Reports", icon: <BarChartIcon />, path: "/reports" },
-    { label: "Notifications", icon: <NotificationsIcon />, path: "/notifications" },
-  ],
+  admin_supervisor: ADMIN_SUPERVISOR_NAV_ITEMS,
+  // Task 7 — the CEO sees exactly what an Administrator sees: every backend
+  // require_roles("admin_supervisor", ...) call was widened to also accept
+  // "ceo" (see backend/app/api/*.py), so every one of these routes is
+  // genuinely reachable, not just visually shown. The one place CEO differs
+  // from Admin is inside the Users page itself (managing another Admin or
+  // the CEO account is CEO-exclusive) — see UsersPage.tsx.
+  ceo: ADMIN_SUPERVISOR_NAV_ITEMS,
   // The display role never actually renders AppLayout — its one page
   // (DisplayCalendarPage) is deliberately layout-free (no sidebar/top bar,
   // per "occupy the available screen efficiently") and routed outside

@@ -11,7 +11,7 @@ from app.services import deletion_service, client_site_service
 
 router = APIRouter(tags=["client-sites"])
 
-ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor")
+ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor", "ceo")
 
 
 def _to_page(result) -> Page[ClientSiteOut]:
@@ -73,7 +73,7 @@ def get_site(
 def create_site(
     payload: ClientSiteCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[ClientSiteOut]:
     site = client_site_service.create_site(db, payload)
     return ApiResponse(message="Client site created.", data=ClientSiteOut.model_validate(site))
@@ -84,7 +84,7 @@ def update_site(
     site_id: int,
     payload: ClientSiteUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[ClientSiteOut]:
     site = client_site_service.update_site(db, site_id, payload)
     return ApiResponse(message="Client site updated.", data=ClientSiteOut.model_validate(site))
@@ -94,7 +94,7 @@ def update_site(
 def deactivate_site(
     site_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[ClientSiteOut]:
     site = client_site_service.deactivate_site(db, site_id)
     return ApiResponse(message="Client site deactivated.", data=ClientSiteOut.model_validate(site))
@@ -104,7 +104,7 @@ def deactivate_site(
 def activate_site(
     site_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[ClientSiteOut]:
     site = client_site_service.activate_site(db, site_id)
     return ApiResponse(message="Client site reactivated.", data=ClientSiteOut.model_validate(site))
@@ -114,7 +114,7 @@ def activate_site(
 def check_client_site_deletable(
     site_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[dict]:
     """Task 5 — lets the UI warn the Administrator *before* they confirm a
     permanent deletion, instead of only failing afterwards."""
@@ -131,7 +131,7 @@ def check_client_site_deletable(
 def delete_client_site_permanently(
     site_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[None]:
     """Task 5 — PERMANENT hard delete (admin only). Refused with 409 if any
     record still references this row; historical data is never cascaded."""

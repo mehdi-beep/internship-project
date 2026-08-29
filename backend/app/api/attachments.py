@@ -15,7 +15,7 @@ from config import get_settings
 
 router = APIRouter(prefix="/attachments", tags=["attachments"])
 
-ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor")
+ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor", "ceo")
 settings = get_settings()
 
 

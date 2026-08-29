@@ -77,7 +77,7 @@ export default function App() {
                 <Route
                   path="/admin/users"
                   element={
-                    <ProtectedRoute allowedRoles={["admin_supervisor"]}>
+                    <ProtectedRoute allowedRoles={["admin_supervisor", "ceo"]}>
                       <AppLayout>
                         <UsersPage />
                       </AppLayout>
@@ -87,7 +87,7 @@ export default function App() {
                 <Route
                   path="/admin/clients"
                   element={
-                    <ProtectedRoute allowedRoles={["admin_supervisor"]}>
+                    <ProtectedRoute allowedRoles={["admin_supervisor", "ceo"]}>
                       <AppLayout>
                         <ClientsPage />
                       </AppLayout>
@@ -97,7 +97,7 @@ export default function App() {
                 <Route
                   path="/admin/sites"
                   element={
-                    <ProtectedRoute allowedRoles={["admin_supervisor"]}>
+                    <ProtectedRoute allowedRoles={["admin_supervisor", "ceo"]}>
                       <AppLayout>
                         <SitesPage />
                       </AppLayout>
@@ -107,7 +107,7 @@ export default function App() {
                 <Route
                   path="/admin/contracts"
                   element={
-                    <ProtectedRoute allowedRoles={["admin_supervisor"]}>
+                    <ProtectedRoute allowedRoles={["admin_supervisor", "ceo"]}>
                       <AppLayout>
                         <ContractsPage />
                       </AppLayout>
@@ -117,7 +117,7 @@ export default function App() {
                 <Route
                   path="/admin/projects"
                   element={
-                    <ProtectedRoute allowedRoles={["admin_supervisor"]}>
+                    <ProtectedRoute allowedRoles={["admin_supervisor", "ceo"]}>
                       <AppLayout>
                         <ProjectsPage />
                       </AppLayout>
@@ -127,7 +127,7 @@ export default function App() {
                 <Route
                   path="/admin/travaux"
                   element={
-                    <ProtectedRoute allowedRoles={["admin_supervisor"]}>
+                    <ProtectedRoute allowedRoles={["admin_supervisor", "ceo"]}>
                       <AppLayout>
                         <TravauxPage />
                       </AppLayout>
@@ -137,7 +137,7 @@ export default function App() {
                 <Route
                   path="/admin/point-rules"
                   element={
-                    <ProtectedRoute allowedRoles={["admin_supervisor"]}>
+                    <ProtectedRoute allowedRoles={["admin_supervisor", "ceo"]}>
                       <AppLayout>
                         <PointRulesPage />
                       </AppLayout>
@@ -147,7 +147,7 @@ export default function App() {
                 <Route
                   path="/planning"
                   element={
-                    <ProtectedRoute allowedRoles={["chef_technicien", "admin_supervisor"]}>
+                    <ProtectedRoute allowedRoles={["chef_technicien", "admin_supervisor", "ceo"]}>
                       <AppLayout>
                         <PlanningPage />
                       </AppLayout>
@@ -217,7 +217,7 @@ export default function App() {
                 <Route
                   path="/approvals/administrative"
                   element={
-                    <ProtectedRoute allowedRoles={["admin_supervisor"]}>
+                    <ProtectedRoute allowedRoles={["admin_supervisor", "ceo"]}>
                       <AppLayout>
                         <AdministrativeApprovalsPage />
                       </AppLayout>
@@ -227,7 +227,7 @@ export default function App() {
                 <Route
                   path="/reports"
                   element={
-                    <ProtectedRoute allowedRoles={["chef_technicien", "admin_supervisor"]}>
+                    <ProtectedRoute allowedRoles={["chef_technicien", "admin_supervisor", "ceo"]}>
                       <AppLayout>
                         <ReportsPage />
                       </AppLayout>
@@ -237,7 +237,7 @@ export default function App() {
                 <Route
                   path="/technicians/:id"
                   element={
-                    <ProtectedRoute allowedRoles={["chef_technicien", "admin_supervisor"]}>
+                    <ProtectedRoute allowedRoles={["chef_technicien", "admin_supervisor", "ceo"]}>
                       <AppLayout>
                         <TechnicianProfilePage />
                       </AppLayout>

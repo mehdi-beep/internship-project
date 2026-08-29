@@ -47,7 +47,7 @@ export async function resolveNotificationPath(notification: Notification, role: 
     if (notification.title === "Assignment Removed") {
       return role === "technician" ? "/interventions" : "/planning";
     }
-    if (role === "chef_technicien" || role === "admin_supervisor") {
+    if (role === "chef_technicien" || role === "admin_supervisor" || role === "ceo") {
       return notification.related_planning_id != null
         ? `/planning?highlight=${notification.related_planning_id}`
         : "/planning";

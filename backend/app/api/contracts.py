@@ -14,7 +14,7 @@ from app.services import deletion_service, contract_service
 
 router = APIRouter(tags=["contracts"])
 
-ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor")
+ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor", "ceo")
 
 
 def _to_page(result) -> Page[ContractOut]:
@@ -71,7 +71,7 @@ def get_contract(
 def create_contract(
     payload: ContractCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[ContractOut]:
     contract = contract_service.create_contract(db, payload)
     return ApiResponse(message="Contract created.", data=ContractOut.model_validate(contract))
@@ -82,7 +82,7 @@ def update_contract(
     contract_id: int,
     payload: ContractUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[ContractOut]:
     contract = contract_service.update_contract(db, contract_id, payload)
     return ApiResponse(message="Contract updated.", data=ContractOut.model_validate(contract))
@@ -92,7 +92,7 @@ def update_contract(
 def archive_contract(
     contract_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[ContractOut]:
     contract = contract_service.archive_contract(db, contract_id)
     return ApiResponse(message="Contract archived.", data=ContractOut.model_validate(contract))
@@ -102,7 +102,7 @@ def archive_contract(
 def check_contract_deletable(
     contract_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[dict]:
     """Task 5 — lets the UI warn the Administrator *before* they confirm a
     permanent deletion, instead of only failing afterwards."""
@@ -119,7 +119,7 @@ def check_contract_deletable(
 def delete_contract_permanently(
     contract_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin_supervisor")),
+    _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[None]:
     """Task 5 — PERMANENT hard delete (admin only). Refused with 409 if any
     record still references this row; historical data is never cascaded."""

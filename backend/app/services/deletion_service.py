@@ -38,6 +38,7 @@ from app.models.intervention_technician import InterventionTechnician
 from app.models.notification import Notification
 from app.models.planning import Planning
 from app.models.project import Project
+from app.models.role import RoleName
 from app.models.travail import Travail
 from app.models.user import User
 
@@ -156,10 +157,28 @@ _PROTECTED_ENTITIES: set[str] = set()
 
 
 def ensure_deletable(db: Session, entity_key: str, entity_id: int) -> None:
-    """A no-op today (`_PROTECTED_ENTITIES` is empty — nothing is hard-blocked
-    any more), kept in place and still called by every entity's delete
-    service so a future entity type can be hard-blocked again by adding it to
-    `_PROTECTED_ENTITIES` without having to re-wire six call sites."""
+    """A no-op for entity TYPES today (`_PROTECTED_ENTITIES` is empty —
+    nothing is hard-blocked any more at that level), kept in place and still
+    called by every entity's delete service so a future entity type can be
+    hard-blocked again by adding it to `_PROTECTED_ENTITIES` without having
+    to re-wire six call sites.
+
+    The one exception isn't an entity type, it's a single specific ROW: the
+    CEO account. There can only ever be one (enforced separately, at
+    creation, in user_service._ensure_single_ceo), and per explicit
+    instruction it must be immune to permanent deletion as well as
+    deactivation, unconditionally — not "unless nothing references it," the
+    way every other user used to work before Task 6. Checked here rather
+    than via _PROTECTED_ENTITIES because that mechanism blocks an entire
+    entity TYPE ("user"), and Task 6 deliberately made every OTHER user
+    genuinely deletable — only this one specific row is exempt."""
+    if entity_key == "user":
+        user = db.get(User, entity_id)
+        if user is not None and user.role.name == RoleName.CEO:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The CEO account cannot be permanently deleted.",
+            )
     if entity_key not in _PROTECTED_ENTITIES:
         return
     _, _, noun = _ENTITY_CHECKS[entity_key]

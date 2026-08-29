@@ -14,7 +14,7 @@ router = APIRouter(prefix="/point-rules", tags=["point-rules"])
 # other reader — unlike travaux/clients/etc., no technician or chef page ever
 # needs to fetch this list (calculate_points() reads it server-side, not via
 # an API call), so there is no T/C read case to support here.
-ADMIN_ONLY = ("admin_supervisor",)
+ADMIN_ONLY = ("admin_supervisor", "ceo")
 
 
 @router.get("", response_model=ApiResponse[list[PointRuleOut]])

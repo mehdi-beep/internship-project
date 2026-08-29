@@ -1,9 +1,23 @@
-import { useQuery } from "@tanstack/react-query";
-import { Box, Chip, Grid, List, ListItem, ListItemText, Stack, Typography } from "@mui/material";
+import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Grid,
+  List,
+  ListItem,
+  ListItemText,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
 import dayjs from "dayjs";
 import { useNavigate } from "react-router-dom";
 import ChartCard from "../components/ChartCard";
 import SimpleBarChart from "../components/SimpleBarChart";
+import Modal from "../components/Modal";
 import ProfileHeader from "../components/ProfileHeader";
 import ProfileStatGrid from "../components/ProfileStatGrid";
 import StatusBadge from "../components/StatusBadge";
@@ -14,9 +28,147 @@ import { listInterventions } from "../services/interventionService";
 import { listPlanning } from "../services/planningService";
 import { listChefOptions } from "../services/userService";
 import { listMyRecentDecisions } from "../services/approvalService";
+import { checkPasswordResetAvailable, confirmPasswordReset, requestPasswordReset } from "../services/authService";
+
+function extractErrorDetail(err: unknown, fallback: string): string {
+  const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+  return detail ?? fallback;
+}
+
+/** Task 8 — the two-step self-service reset flow, shared by every role's
+ * profile body via ProfileHeader's onResetPasswordClick. Centralized here
+ * (rather than duplicated per profile body) since the flow itself has
+ * nothing role-specific about it — it always acts on the caller's own
+ * account, identically, regardless of who they are. */
+function usePasswordResetDialog() {
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<"request" | "confirm">("request");
+  const [code, setCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const { data: available, isLoading: availabilityLoading } = useQuery({
+    queryKey: ["auth", "password-reset-available"],
+    queryFn: checkPasswordResetAvailable,
+    enabled: open,
+  });
+
+  const requestMutation = useMutation({
+    mutationFn: requestPasswordReset,
+    onSuccess: () => {
+      setStep("confirm");
+      setErrorMessage(null);
+    },
+    onError: (err: unknown) => setErrorMessage(extractErrorDetail(err, "Could not send the reset code.")),
+  });
+
+  const confirmMutation = useMutation({
+    mutationFn: () => confirmPasswordReset(code, newPassword),
+    onSuccess: () => {
+      setSuccessMessage("Your password has been reset.");
+      setErrorMessage(null);
+    },
+    onError: (err: unknown) => setErrorMessage(extractErrorDetail(err, "Could not reset your password.")),
+  });
+
+  const reset = () => {
+    setStep("request");
+    setCode("");
+    setNewPassword("");
+    setErrorMessage(null);
+    setSuccessMessage(null);
+  };
+
+  const openDialog = () => {
+    reset();
+    setOpen(true);
+  };
+
+  const close = () => setOpen(false);
+
+  const dialog = (
+    <Modal open={open} title="Reset Password" onClose={close}>
+      <Stack spacing={2}>
+        {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
+        {successMessage ? (
+          <>
+            <Alert severity="success">{successMessage}</Alert>
+            <Stack direction="row" sx={{ justifyContent: "flex-end" }}>
+              <Button variant="contained" onClick={close}>
+                Done
+              </Button>
+            </Stack>
+          </>
+        ) : availabilityLoading ? (
+          <Typography variant="body2" color="text.secondary">
+            Checking availability…
+          </Typography>
+        ) : !available ? (
+          <Alert severity="warning">
+            Password reset by email isn't set up yet. Ask an Administrator to reset your password instead.
+          </Alert>
+        ) : step === "request" ? (
+          <>
+            <Typography variant="body2">
+              We'll email a 6-digit code to your address on file. Enter it on the next screen along with your new
+              password.
+            </Typography>
+            <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end" }}>
+              <Button onClick={close}>Cancel</Button>
+              <Button variant="contained" onClick={() => requestMutation.mutate()} disabled={requestMutation.isPending}>
+                Send Code
+              </Button>
+            </Stack>
+          </>
+        ) : (
+          <>
+            <Typography variant="body2" color="text.secondary">
+              Enter the code we emailed you, and choose your new password.
+            </Typography>
+            <TextField
+              label="6-digit code"
+              fullWidth
+              autoFocus
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              slotProps={{ htmlInput: { maxLength: 6, inputMode: "numeric" } }}
+            />
+            <TextField
+              label="New Password"
+              type="password"
+              fullWidth
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              helperText="Minimum 8 characters."
+            />
+            <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between" }}>
+              <Button onClick={() => requestMutation.mutate()} disabled={requestMutation.isPending}>
+                Resend Code
+              </Button>
+              <Stack direction="row" spacing={1}>
+                <Button onClick={close}>Cancel</Button>
+                <Button
+                  variant="contained"
+                  onClick={() => confirmMutation.mutate()}
+                  disabled={code.length !== 6 || newPassword.length < 8 || confirmMutation.isPending}
+                >
+                  Reset Password
+                </Button>
+              </Stack>
+            </Stack>
+          </>
+        )}
+      </Stack>
+    </Modal>
+  );
+
+  return { dialog, openDialog };
+}
 
 export default function ProfilePage() {
   const { user } = useAuth();
+  const { dialog, openDialog } = usePasswordResetDialog();
 
   if (!user) return null;
 
@@ -26,15 +178,16 @@ export default function ProfilePage() {
         My Profile
       </Typography>
       {user.role === "technician" ? (
-        <TechnicianProfileBody userId={user.id} />
+        <TechnicianProfileBody userId={user.id} onResetPasswordClick={openDialog} />
       ) : (
-        <SupervisorProfileBody role={user.role} />
+        <SupervisorProfileBody role={user.role} onResetPasswordClick={openDialog} />
       )}
+      {dialog}
     </Box>
   );
 }
 
-function TechnicianProfileBody({ userId }: { userId: number }) {
+function TechnicianProfileBody({ userId, onResetPasswordClick }: { userId: number; onResetPasswordClick: () => void }) {
   const navigate = useNavigate();
 
   const { data, isLoading, isError, error, refetch } = useQuery({
@@ -68,6 +221,7 @@ function TechnicianProfileBody({ userId }: { userId: number }) {
             email={data.email}
             phone={data.phone}
             active={data.active}
+            onResetPasswordClick={onResetPasswordClick}
             supervisingRole={
               <>
                 Supervised by Chef des Techniciens
@@ -157,7 +311,7 @@ function TechnicianProfileBody({ userId }: { userId: number }) {
   );
 }
 
-function SupervisorProfileBody({ role }: { role: string }) {
+function SupervisorProfileBody({ role, onResetPasswordClick }: { role: string; onResetPasswordClick: () => void }) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isChef = role === "chef_technicien";
@@ -178,7 +332,13 @@ function SupervisorProfileBody({ role }: { role: string }) {
 
   return (
     <Stack spacing={3}>
-      <ProfileHeader firstName={user.first_name} lastName={user.last_name} role={role} email={user.email} />
+      <ProfileHeader
+        firstName={user.first_name}
+        lastName={user.last_name}
+        role={role}
+        email={user.email}
+        onResetPasswordClick={onResetPasswordClick}
+      />
 
       {isChef ? (
         <ChartCard title="Recent Planning Created" height={300}>

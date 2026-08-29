@@ -208,6 +208,46 @@ def seed_display_role_and_account(db: Session) -> None:
         db.flush()
 
 
+def seed_ceo_role_and_account(db: Session) -> None:
+    """Task 7 — the single source of truth for the `ceo` role row and the one
+    seeded CEO account, mirroring `seed_display_role_and_account` above
+    exactly: called unconditionally at the top of `run()`, before the
+    roles-count guard, so it backfills both rows onto a database that was
+    already fully seeded before this role existed (the committed `dev.db`
+    predates it). Independently idempotent per row, safe to call on every
+    boot. `seed_roles()` below defers to whatever this has already created,
+    the same way it already defers to the display role, to avoid a
+    duplicate-insert unique-constraint violation on a fresh database.
+
+    Unlike every other role, CEO is capped at exactly one account, enforced
+    for real in `user_service.create_user` (not just here) — this function
+    only ever creates the one seeded account below, and never runs again
+    once a `ceo` role row already exists, so it can never itself violate
+    that cap."""
+    from app.models.role import RoleName
+
+    role = db.query(Role).filter(Role.name == RoleName.CEO).first()
+    if role is not None:
+        return  # the role (and therefore the one seeded account) already exist
+
+    role = Role(name=RoleName.CEO)
+    db.add(role)
+    db.flush()
+
+    db.add(
+        User(
+            first_name="Founder",
+            last_name="CEO",
+            username="ceo01",
+            password_hash=hash_password("Password123!"),
+            email="ceo01@bims.local",
+            role=role,
+            active=True,
+        )
+    )
+    db.flush()
+
+
 def seed_users(db: Session, roles: dict[str, Role]) -> dict[str, list[User]]:
     """Ch.51: 10 Technicians, 2 Chef des Techniciens, 2 Administration
     Supervisors, plus Task 3's single hallway-display account."""
@@ -672,6 +712,15 @@ def run() -> None:
         # database would otherwise never gain it (or its demo account).
         print("Seeding display role and account (if not already configured)...")
         seed_display_role_and_account(db)
+        db.commit()
+
+        # Same backfill rationale again — the committed `dev.db` predates the
+        # `ceo` role entirely, so this is what gives an already-running,
+        # already-seeded deployment its one CEO account without anyone
+        # having to create it by hand through the API (which, by design,
+        # only a CEO could ever do — see user_service.create_user).
+        print("Seeding CEO role and account (if not already configured)...")
+        seed_ceo_role_and_account(db)
         db.commit()
 
         if not is_fresh_database:

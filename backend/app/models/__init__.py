@@ -14,6 +14,7 @@ from app.models.planning import Planning
 from app.models.notification import Notification
 from app.models.approval_history import ApprovalHistory
 from app.models.audit_log import AuditLog
+from app.models.password_reset_code import PasswordResetCode
 
 __all__ = [
     "Role",
@@ -32,4 +33,5 @@ __all__ = [
     "Notification",
     "ApprovalHistory",
     "AuditLog",
+    "PasswordResetCode",
 ]
