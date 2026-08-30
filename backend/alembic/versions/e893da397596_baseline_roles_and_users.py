@@ -21,8 +21,6 @@ role_name_enum = sa.Enum("technician", "chef_technicien", "admin_supervisor", na
 
 
 def upgrade() -> None:
-    role_name_enum.create(op.get_bind(), checkfirst=True)
-
     op.create_table(
         "roles",
         sa.Column("id", sa.Integer(), primary_key=True),
