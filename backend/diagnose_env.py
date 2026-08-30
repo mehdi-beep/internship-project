@@ -1,9 +1,5 @@
-"""One-off diagnostic: checks for a connection pooler (PgBouncer etc.)
-sitting between us and real Postgres, and opens TWO separate
-connections back-to-back to see if they report different backend PIDs
-or different visible state -- the smoking gun for "one script sees an
-empty DB, the other sees pre-existing objects" despite identical
-connection strings. Delete after use.
+"""One-off diagnostic: confirms the migration actually built the full
+schema, not just an empty alembic_version row. Delete after use.
 """
 
 import psycopg
@@ -12,20 +8,21 @@ from config import get_settings
 
 settings = get_settings()
 raw_url = settings.database_url.replace("postgresql+psycopg://", "postgresql://")
+conn = psycopg.connect(raw_url, client_encoding="UTF8")
 
+tables = conn.execute(
+    "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename"
+).fetchall()
+print(f"--- {len(tables)} tables ---")
+for row in tables:
+    print(row[0])
 
-def snapshot(label: str) -> None:
-    conn = psycopg.connect(raw_url, client_encoding="UTF8")
-    pid = conn.execute("SELECT pg_backend_pid()").fetchone()
-    version = conn.execute("SHOW server_version").fetchone()
-    types = conn.execute(
-        "SELECT typname FROM pg_type t JOIN pg_namespace n ON t.typnamespace = n.oid "
-        "WHERE n.nspname = 'public' AND t.typtype = 'e'"
-    ).fetchall()
-    print(f"[{label}] backend_pid={pid} server_version={version} custom_types={types}")
-    conn.close()
+print("--- alembic_version ---")
+print(conn.execute("SELECT version_num FROM alembic_version").fetchone())
 
+print("--- roles seeded? ---")
+print(conn.execute("SELECT count(*) FROM roles").fetchone())
+print("--- users seeded? ---")
+print(conn.execute("SELECT count(*) FROM users").fetchone())
 
-snapshot("connection 1")
-snapshot("connection 2")
-snapshot("connection 3")
+conn.close()
