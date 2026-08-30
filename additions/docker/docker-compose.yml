@@ -19,17 +19,18 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: ../../backend
+      dockerfile: ../../additions/docker/backend.Dockerfile
     container_name: bims_backend
     restart: unless-stopped
     env_file:
-      - ./backend/.env
+      - ../../backend/.env
     environment:
       DATABASE_URL: postgresql+psycopg://bims_user:bims_password@db:5432/bims_db
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
+      - ../../backend:/app
     depends_on:
       db:
         condition: service_healthy
@@ -37,7 +38,8 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ../../frontend
+      dockerfile: ../../additions/docker/frontend.Dockerfile
     container_name: bims_frontend
     restart: unless-stopped
     environment:
@@ -45,7 +47,7 @@ services:
     ports:
       - "5173:5173"
     volumes:
-      - ./frontend:/app
+      - ../../frontend:/app
       - /app/node_modules
     depends_on:
       - backend
