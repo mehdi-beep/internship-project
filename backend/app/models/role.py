@@ -33,6 +33,17 @@ class Role(Base):
     __tablename__ = "roles"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[RoleName] = mapped_column(Enum(RoleName, name="role_name"), unique=True, nullable=False)
+    # values_callable is required here: SQLAlchemy's Enum type defaults to
+    # storing a Python enum's NAME (e.g. "TECHNICIAN"), not its VALUE
+    # (e.g. "technician") — invisible against SQLite (a loosely-typed text
+    # column, so the mismatch never surfaces), but every Alembic migration
+    # creates the actual Postgres enum type using the lowercase VALUES
+    # (see e893da397596's CREATE TYPE), so a real Postgres deployment
+    # rejects every insert without this.
+    name: Mapped[RoleName] = mapped_column(
+        Enum(RoleName, name="role_name", values_callable=lambda enum_cls: [member.value for member in enum_cls]),
+        unique=True,
+        nullable=False,
+    )
 
     users: Mapped[list["User"]] = relationship(back_populates="role")
