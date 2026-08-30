@@ -1,28 +1,20 @@
-"""One-off diagnostic: confirms the migration actually built the full
-schema, not just an empty alembic_version row. Delete after use.
+"""One-off diagnostic: isolates the exact SQL SQLAlchemy sends when
+inserting a Role row, to find out why it sends the enum member's NAME
+("DISPLAY") instead of its VALUE ("display"). Delete after use.
 """
 
-import psycopg
+from app.database import SessionLocal
+from app.models.role import Role, RoleName
 
-from config import get_settings
-
-settings = get_settings()
-raw_url = settings.database_url.replace("postgresql+psycopg://", "postgresql://")
-conn = psycopg.connect(raw_url, client_encoding="UTF8")
-
-tables = conn.execute(
-    "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename"
-).fetchall()
-print(f"--- {len(tables)} tables ---")
-for row in tables:
-    print(row[0])
-
-print("--- alembic_version ---")
-print(conn.execute("SELECT version_num FROM alembic_version").fetchone())
-
-print("--- roles seeded? ---")
-print(conn.execute("SELECT count(*) FROM roles").fetchone())
-print("--- users seeded? ---")
-print(conn.execute("SELECT count(*) FROM users").fetchone())
-
-conn.close()
+db = SessionLocal()
+try:
+    role = Role(name=RoleName.TECHNICIAN)
+    db.add(role)
+    db.flush()  # sends the INSERT without committing, so we can inspect then roll back
+    print("SUCCESS: inserted", role.id, role.name)
+    db.rollback()
+except Exception as exc:
+    print("FAILED:", repr(exc))
+    db.rollback()
+finally:
+    db.close()
