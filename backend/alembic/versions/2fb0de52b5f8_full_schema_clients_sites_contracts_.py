@@ -52,20 +52,6 @@ audit_action_enum = sa.Enum(
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    for enum in (
-        contract_status_enum,
-        project_status_enum,
-        intervention_type_enum,
-        location_type_enum,
-        intervention_status_enum,
-        priority_enum,
-        planning_status_enum,
-        approval_level_enum,
-        approval_decision_enum,
-        audit_action_enum,
-    ):
-        enum.create(bind, checkfirst=True)
 
     # --- clients (Ch.37) ---
     op.create_table(
