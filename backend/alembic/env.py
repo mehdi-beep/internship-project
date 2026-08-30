@@ -31,10 +31,17 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    # client_encoding is forced explicitly for the same reason as in
+    # app/database/session.py: some production hosts run Postgres 9.6, whose
+    # text-encoding negotiation with psycopg3 can return raw bytes instead of
+    # str, which breaks SQLAlchemy's own str-based server-version regex on
+    # first connect. Skipped for SQLite, which doesn't accept this kwarg.
+    connect_args = {} if settings.is_sqlite else {"client_encoding": "UTF8"}
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
 
     with connectable.connect() as connection:
