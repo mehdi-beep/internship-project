@@ -1,6 +1,5 @@
-"""One-off diagnostic: confirms the full seed actually landed correctly
-by checking real row counts and that a login-relevant user exists.
-Delete after use.
+"""One-off diagnostic: confirms the real travaux catalog and CEO
+account actually landed on production. Delete after use.
 """
 
 import psycopg
@@ -11,21 +10,14 @@ settings = get_settings()
 raw_url = settings.database_url.replace("postgresql+psycopg://", "postgresql://")
 conn = psycopg.connect(raw_url, client_encoding="UTF8")
 
-tables = [
-    "roles", "users", "clients", "client_sites", "contracts", "projects",
-    "travaux", "interventions", "planning", "point_rules", "notifications",
-]
-for t in tables:
-    count = conn.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
-    print(f"{t}: {count}")
-
-print("--- role names ---")
-print(conn.execute("SELECT name FROM roles ORDER BY id").fetchall())
-
-print("--- sample usernames per role ---")
+print("--- travaux count ---")
+print(conn.execute("SELECT count(*) FROM travaux").fetchone())
+print("--- sample travaux codes ---")
+print(conn.execute("SELECT travail_code, travail_name FROM travaux ORDER BY id LIMIT 5").fetchall())
+print("--- CEO account ---")
 print(
     conn.execute(
-        "SELECT u.username, r.name FROM users u JOIN roles r ON u.role_id = r.id ORDER BY r.name, u.username"
+        "SELECT u.username, u.email, r.name FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name = 'ceo'"
     ).fetchall()
 )
 
