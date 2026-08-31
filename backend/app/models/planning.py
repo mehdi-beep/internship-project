@@ -4,7 +4,7 @@ from sqlalchemy import Date, Enum, ForeignKey, Integer, String, Text, Time, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.enums import PlanningStatus, Priority
+from app.models.enums import PlanningStatus, Priority, enum_values
 
 
 class Planning(Base):
@@ -26,9 +26,16 @@ class Planning(Base):
     planned_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     planned_start_time: Mapped[time] = mapped_column(Time, nullable=False)
     estimated_duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    priority: Mapped[Priority] = mapped_column(Enum(Priority, name="priority"), nullable=False, default=Priority.NORMAL, index=True)
+    priority: Mapped[Priority] = mapped_column(
+        Enum(Priority, name="priority", values_callable=enum_values),
+        nullable=False,
+        default=Priority.NORMAL,
+        index=True,
+    )
     status: Mapped[PlanningStatus] = mapped_column(
-        Enum(PlanningStatus, name="planning_status"), nullable=False, default=PlanningStatus.PLANNED
+        Enum(PlanningStatus, name="planning_status", values_callable=enum_values),
+        nullable=False,
+        default=PlanningStatus.PLANNED,
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     urgent_queue_position: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)

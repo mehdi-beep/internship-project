@@ -4,7 +4,7 @@ from sqlalchemy import Date, Enum, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.enums import ContractStatus
+from app.models.enums import ContractStatus, enum_values
 
 
 class Contract(Base):
@@ -19,7 +19,9 @@ class Contract(Base):
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[ContractStatus] = mapped_column(
-        Enum(ContractStatus, name="contract_status"), nullable=False, default=ContractStatus.ACTIVE
+        Enum(ContractStatus, name="contract_status", values_callable=enum_values),
+        nullable=False,
+        default=ContractStatus.ACTIVE,
     )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())

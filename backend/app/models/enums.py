@@ -1,6 +1,17 @@
 import enum
 
 
+def enum_values(enum_cls: type[enum.Enum]) -> list[str]:
+    """Pass as `values_callable` to every SQLAlchemy `Enum(SomeEnum, ...)`
+    column below. Without it, SQLAlchemy's Enum type stores a Python
+    enum's NAME (e.g. "ACTIVE"), not its VALUE ("active") — invisible
+    against SQLite (a loosely-typed text column), but every Alembic
+    migration creates the actual Postgres enum type using the lowercase
+    VALUES, so a real Postgres deployment rejects every insert without
+    this."""
+    return [member.value for member in enum_cls]
+
+
 class InterventionStatus(str, enum.Enum):
     """The 9-state lifecycle from project_specifications.md Chapter 9."""
 

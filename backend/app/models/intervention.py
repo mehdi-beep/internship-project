@@ -4,7 +4,7 @@ from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, Text, 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.enums import InterventionStatus, InterventionType, LocationType
+from app.models.enums import InterventionStatus, InterventionType, LocationType, enum_values
 
 
 class Intervention(Base):
@@ -33,9 +33,11 @@ class Intervention(Base):
     warranty_reference_id: Mapped[int | None] = mapped_column(ForeignKey("interventions.id"), nullable=True)
 
     intervention_type: Mapped[InterventionType] = mapped_column(
-        Enum(InterventionType, name="intervention_type"), nullable=False
+        Enum(InterventionType, name="intervention_type", values_callable=enum_values), nullable=False
     )
-    location_type: Mapped[LocationType] = mapped_column(Enum(LocationType, name="location_type"), nullable=False)
+    location_type: Mapped[LocationType] = mapped_column(
+        Enum(LocationType, name="location_type", values_callable=enum_values), nullable=False
+    )
 
     intervention_date: Mapped[date] = mapped_column(Date, nullable=False, server_default=func.current_date())
     start_time: Mapped[time] = mapped_column(Time, nullable=False)
@@ -48,7 +50,7 @@ class Intervention(Base):
     contact_person: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     status: Mapped[InterventionStatus] = mapped_column(
-        Enum(InterventionStatus, name="intervention_status"),
+        Enum(InterventionStatus, name="intervention_status", values_callable=enum_values),
         nullable=False,
         default=InterventionStatus.DRAFT,
         index=True,
