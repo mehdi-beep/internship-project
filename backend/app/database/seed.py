@@ -73,32 +73,77 @@ DEFAULT_POINT_RULES: list[tuple[time, time, int]] = [
     (time(22, 0), time(0, 0), 1),
 ]
 
-TRAVAUX_CATALOG = [
-    ("Firewall Installation", "Network"),
-    ("Fiber Repair", "Network"),
-    ("Server Maintenance", "Infrastructure"),
-    ("Camera Configuration", "Security"),
-    ("Router Replacement", "Network"),
-    ("Switch Configuration", "Network"),
-    ("UPS Battery Replacement", "Infrastructure"),
-    ("Access Point Installation", "Network"),
-    ("VPN Setup", "Network"),
-    ("Antivirus Deployment", "Security"),
-    ("Backup Configuration", "Infrastructure"),
-    ("Printer Installation", "Hardware"),
-    ("Workstation Setup", "Hardware"),
-    ("Cabling — Cat6", "Network"),
-    ("PABX Maintenance", "Telephony"),
-    ("Alarm System Check", "Security"),
-    ("CCTV Recorder Replacement", "Security"),
-    ("Load Balancer Configuration", "Network"),
-    ("Data Migration", "Infrastructure"),
-    ("Software Update Rollout", "Infrastructure"),
-    ("Network Diagnostics", "Network"),
-    ("Cable Termination", "Network"),
-    ("Rack Installation", "Infrastructure"),
-    ("Wireless Site Survey", "Network"),
-    ("Badge Reader Installation", "Security"),
+# Real company catalog, verbatim from the client's own reference spreadsheet
+# (three column-groups, transcribed left to right, top to bottom). Category is
+# deliberately left blank for all of them, matching how the equivalent earlier
+# batch of real codes was seeded — this sheet has no category grouping of its
+# own, unlike the old generic placeholder catalog it replaces.
+#
+# Several codes repeat verbatim across the sheet's column-groups (e.g.
+# 700-099-XX, 700-140-FP, 700-AUDIT), and two pairs share a code with a
+# different name (700-450-PS, 700-850). Every code must be unique in the
+# database (Travail.travail_code has a unique constraint), so each repeat
+# after the first gets a "-2" suffix appended to its code, per the same rule
+# applied to the previous real-codes batch — the name is kept unchanged.
+TRAVAUX_CATALOG: list[tuple[str, str, str | None]] = [
+    ("700-001-XX", "INSTALLATION Automation / GTB", None),
+    ("700-011-XX", "Administration GTC / GTB (Forfait Projet)", None),
+    ("700-051-XX", "ADMINISTRATION SYSTEME APPEL MALADE (Forfait Projet)", None),
+    ("700-099-XX", "POSE APPAREILLAGE (SUR SITE-J/H)", None),
+    ("700-120-XX", "BRASSAGE INFORMATIQUE (SUR SITE-J/H)", None),
+    ("700-140-FP", "FUSION OPTIQUE (Forfait Projet)", None),
+    ("700-200-XX", "INSTALLATION SYSTÈME DE SONORISATION (SUR SITE-J/H)", None),
+    ("700-210-XX", "INSTALLATION D'AUDIOCONFÉRENCE (SUR SITE-J/H)", None),
+    ("700-220-XX", "INSTALLATION VIDÉOSURVEILLANCE (SUR SITE-J/H)", None),
+    ("700-230-XX", "INSTALLATION SYSTÈME DÉTECTION INCENDIE (SUR SITE-J/H)", None),
+    ("700-240-XX", "INSTALLATION SYSTÈME ALARME INTRUSION (SUR SITE-J/H)", None),
+    ("700-250-XX", "INSTALLATION MISE EN SERVICE CONTROL D'ACCES (SUR SITE-J/H)", None),
+    ("700-260-XX", "INSTALLATION SYSTÈME VISIOPHONE (Forfait Projet)", None),
+    ("700-399-XX", "INSTALLATION ET ADMINISTRATION LOGICIEL (SUR SITE/J/H)", None),
+    ("700-AUDIT", "AUDIT, ASSISTANCE ET CONSEIL", None),
+    ("700-SER-XX", "INSTALLATION DIVERS (Forfait Projet)", None),
+    ("700-Diag-Div", "Diagnostique opération divers", None),
+    ("700-Diag-Spec", "Diagnostique", None),
+    ("700-099-XX-2", "POSE APPAREILLAGE (SUR SITE-J/H)", None),
+    ("700-120-XX-2", "BRASSAGE INFORMATIQUE (Forfait Projet)", None),
+    ("700-140-FP-2", "FUSION OPTIQUE (Forfait Projet)", None),
+    ("700-300-XX", "ADMINISTRATION SWITCH RÉSEAU INFORMATIQUE (SUR SITE-J/H)", None),
+    ("700-310-XX", "ADMINISTRATION WIFI ET RADIO (Forfait Projet)", None),
+    ("700-320-XX", "ADMINISTRATION FIREWALL (SUR SITE-J/H)", None),
+    ("700-330-XX", "ADMINISTRATION IPBX TÉLÉPHONIE (Forfait Projet)", None),
+    ("700-340-XX", "ADMINISTRATION SERVEUR (SUR SITE-J/H)", None),
+    ("700-350-XX", "INSTALLATION / ADMINISTRATION PC DE BUREAU (ATELIER)", None),
+    ("700-360-XX", "INSTALLATION /ADMINISTRATION PC PORTABLE (SUR SITE - J/H)", None),
+    ("700-370-XX", "INSTALLATION ECRANS (SUR SITE-J/H)", None),
+    ("700-399-XX-2", "INSTALLATION ET ADMINISTRATION LOGICIEL (SUR SITE / J/H)", None),
+    ("700-AUDIT-2", "AUDIT, ASSISTANCE ET CONSEIL", None),
+    ("700-SER-XX-2", "INSTALLATION DIVERS (Forfait Projet)", None),
+    ("700-Diag-Div-2", "Diagnostique opération divers", None),
+    ("700-Diag-Spec-2", "Diagnostique", None),
+    ("700-400", "CABLAGE CFA", None),
+    ("700-450-PS", "CABLAGE CFO PS RO2V", None),
+    ("700-450-GS", "CABLAGE CFO GS RO2V", None),
+    ("700-450-MS", "CABLAGE CFO MS RO2V", None),
+    ("700-450-PS-2", "CABLAGE CFO PS RO2V", None),
+    ("700-510-PT", "CÂBLAGE COFFRET AVEC BORNIER ET ACCESSOIRES TAILLE PETITE", None),
+    ("700-510-MT", "CÂBLAGE COFFRET AVEC BORNIER ET ACCESSOIRES TAILLE MOYENNE", None),
+    ("700-510-GT", "CÂBLAGE COFFRET AVEC BORNIER ET ACCESSOIRES TAILLE GRANDE", None),
+    ("700-510-AR", "CÂBLAGE COFFRET AVEC BORNIER ET ACCESSOIRES - ARMOIRE", None),
+    ("700-700", "Etude - audit", None),
+    ("700-810", "INSTALLATION BATIBOX", None),
+    ("700-840", "INSTALLATION TUBE ORANGE", None),
+    ("700-850", "INSTALLATION TUBE", None),
+    ("700-850-2", "INSTALLATION TUBE ANNELE", None),
+    ("700-860", "INSTALLATION TUBE PVC", None),
+    ("700-880", "INSTALLATION CHEMIN DE CABLE", None),
+    ("700-890", "INSTALLATION ELECTRIQUE", None),
+    ("700-990", "INSTALLATION LUMINAIRE", None),
+    ("700-990-F", "INSTALLATION LUMINAIRE", None),
+    ("700-990-GT", "INSTALLATION LUSTRERIE - LUMINAIRE - GT", None),
+    ("700-990-MT", "INSTALLATION LUSTRERIE - LUMINAIRE - MT", None),
+    ("700-990-PT", "INSTALLATION LUSTRERIE - LUMINAIRE - PT", None),
+    ("700-990-GR", "INSTALLATION LUSTRERIE - LUMINAIRE - GUIRLANDE", None),
+    ("700-999", "INSTALLATION DIVERS", None),
 ]
 
 # Statuses assigned to bulk-generated interventions, weighted toward the end
@@ -365,24 +410,13 @@ def seed_contracts_and_projects(db: Session, clients: list[Client]) -> tuple[lis
 
 
 def seed_travaux(db: Session) -> list[Travail]:
-    """Ch.51: 100+ catalog entries. The 25 named ones above are repeated with
-    distinct codes/categorized variants to realistically pad the catalog, since
-    a real technical-operations catalog has many near-duplicate line items
-    (different equipment models, capacities, etc.) rather than 100 unique concepts."""
-    travaux = []
-    code = 100
-    variants = ["", " — Type A", " — Type B", " — Standard", " — Advanced"]
-    for name, category in TRAVAUX_CATALOG:
-        for variant in variants:
-            code += 1
-            travaux.append(
-                Travail(
-                    travail_code=str(code),
-                    travail_name=f"{name}{variant}",
-                    category=category,
-                    active=True,
-                )
-            )
+    """Ch.51: the client's real technical-operations catalog, seeded verbatim
+    (see TRAVAUX_CATALOG's own comment) — one row per real code, no synthetic
+    variant-padding, unlike the placeholder catalog this replaced."""
+    travaux = [
+        Travail(travail_code=code, travail_name=name, category=category, active=True)
+        for code, name, category in TRAVAUX_CATALOG
+    ]
     db.add_all(travaux)
     db.flush()
     return travaux
