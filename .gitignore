@@ -13,7 +13,6 @@ backend/.pytest_cache/
 
 # Node
 frontend/node_modules/
-frontend/dist/
 
 # Uploads (runtime data, not source)
 backend/app/uploads/*

@@ -111,19 +111,33 @@ class TestTravaux:
         assert duplicate.status_code == 409
 
     def test_category_filter_returns_only_matching_rows(self, client, auth_headers):
+        # The real production travaux catalog (app/database/seed.py's
+        # TRAVAUX_CATALOG) deliberately leaves category blank for every row —
+        # it has no natural category grouping of its own — so this can't rely
+        # on the seed data already containing one; it creates its own via the
+        # same endpoint test_duplicate_travail_code_rejected above exercises.
+        admin = auth_headers("admin01")
         tech = auth_headers("tech01")
-        categories = client.get("/api/travaux/categories", headers=tech).json()["data"]
-        assert categories, "seed data should include at least one travail category"
+        target = "Test Category"
+        client.post(
+            "/api/travaux", json={"travail_code": "999-CAT-A", "travail_name": "Categorized A", "category": target}, headers=admin
+        )
+        client.post(
+            "/api/travaux", json={"travail_code": "999-CAT-B", "travail_name": "Categorized B", "category": target}, headers=admin
+        )
 
-        target = categories[0]
         filtered = client.get("/api/travaux", params={"category": target, "page_size": 100}, headers=tech).json()["data"]["items"]
         assert filtered, f"expected at least one travail in category {target!r}"
         assert all(t["category"] == target for t in filtered)
 
     def test_category_filter_combines_with_search(self, client, auth_headers):
+        admin = auth_headers("admin01")
         tech = auth_headers("tech01")
-        categories = client.get("/api/travaux/categories", headers=tech).json()["data"]
-        target = categories[0]
+        target = "Test Category"
+        client.post(
+            "/api/travaux", json={"travail_code": "999-CAT-C", "travail_name": "Categorized C", "category": target}, headers=admin
+        )
+
         by_category = client.get(
             "/api/travaux", params={"category": target, "page_size": 100}, headers=tech
         ).json()["data"]["items"]
