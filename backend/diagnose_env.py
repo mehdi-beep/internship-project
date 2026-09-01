@@ -1,23 +1,23 @@
-"""One-off diagnostic: checks whether tech01's stored password hash on
-production actually verifies against "Password123!", to rule in/out a
-seeding or hashing issue vs. a stale backend process. Delete after use.
+"""One-off diagnostic: calls the exact same auth_service.authenticate()
+function the /api/auth/login endpoint uses, to catch anything a direct
+password-hash check might miss (active flag, role lookup, DB session
+behavior). Delete after use.
 """
 
-import psycopg
+from app.database import SessionLocal
+from app.services import auth_service
+from app.services.auth_service import InvalidCredentialsError
 
-from app.authentication.password import verify_password
-from config import get_settings
-
-settings = get_settings()
-raw_url = settings.database_url.replace("postgresql+psycopg://", "postgresql://")
-conn = psycopg.connect(raw_url, client_encoding="UTF8")
-
-row = conn.execute("SELECT username, password_hash, active FROM users WHERE username = 'tech01'").fetchone()
-print("row exists:", row is not None)
-if row:
-    username, password_hash, active = row
-    print("username:", username)
-    print("active:", active)
-    print("verifies against 'Password123!':", verify_password("Password123!", password_hash))
-
-conn.close()
+db = SessionLocal()
+try:
+    user, token = auth_service.authenticate(db, "tech01", "Password123!")
+    print("SUCCESS")
+    print("user id:", user.id)
+    print("role:", user.role.name.value)
+    print("token (first 40 chars):", token[:40])
+except InvalidCredentialsError:
+    print("FAILED: InvalidCredentialsError raised")
+except Exception as exc:
+    print("FAILED with unexpected exception:", repr(exc))
+finally:
+    db.close()
