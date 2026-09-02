@@ -677,17 +677,25 @@ def get_admin_dashboard(db: Session) -> AdminDashboard:
     approval_rate = round((fully_approved_total / submitted_total) * 100, 1) if submitted_total else 0.0
     rejection_rate = round((rejected_total / submitted_total) * 100, 1) if submitted_total else 0.0
 
-    avg_approval_seconds = db.scalar(
-        select(
-            func.avg(
-                func.julianday(Intervention.administrative_approval_date) - func.julianday(Intervention.submission_date)
-            )
-        ).where(Intervention.status == InterventionStatus.FULLY_APPROVED, Intervention.submission_date.is_not(None))
+    # julianday() is SQLite-only; Postgres has no equivalent function, so the
+    # app's dual-database support (see app/database/session.py) requires
+    # branching here. db.bind.dialect.name reads the actual bound engine
+    # rather than importing global settings, so this stays correct regardless
+    # of which session (real app, or a test's own SQLite session) calls it.
+    if db.bind.dialect.name == "postgresql":
+        day_diff = func.extract(
+            "epoch", Intervention.administrative_approval_date - Intervention.submission_date
+        ) / 86400.0
+    else:
+        day_diff = func.julianday(Intervention.administrative_approval_date) - func.julianday(
+            Intervention.submission_date
+        )
+    avg_approval_days = db.scalar(
+        select(func.avg(day_diff)).where(
+            Intervention.status == InterventionStatus.FULLY_APPROVED, Intervention.submission_date.is_not(None)
+        )
     )
-    # SQLite's julianday() returns a fractional-day difference; convert to minutes.
-    # (On real Postgres this same intent would use EXTRACT(EPOCH FROM ...)/60 —
-    # see README note when migrating.)
-    avg_approval_minutes = round(float(avg_approval_seconds or 0) * 24 * 60, 1)
+    avg_approval_minutes = round(float(avg_approval_days or 0) * 24 * 60, 1)
 
     monthly_interventions_chart = monthly_interventions_series(db, month_start)
 
