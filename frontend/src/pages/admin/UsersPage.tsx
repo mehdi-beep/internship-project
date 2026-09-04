@@ -140,7 +140,13 @@ export default function UsersPage() {
       }),
   });
 
-  const { register, control, handleSubmit, reset, formState: { errors } } = useForm<FormValues>();
+  const { register, control, handleSubmit, reset, watch, formState: { errors } } = useForm<FormValues>();
+  // A Display account is a TV/kiosk login, not a real person (see
+  // app/models/role.py's RoleName.DISPLAY doc comment) — no email needed.
+  // Every other role still requires one, matching the backend's own
+  // _require_email_unless_display validator in app/schemas/user.py.
+  const selectedRole = watch("role");
+  const emailRequiredForRole = selectedRole !== "display";
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["users"] });
 
@@ -384,8 +390,8 @@ export default function UsersPage() {
               fullWidth
               type="email"
               error={!!errors.email}
-              helperText={errors.email?.message}
-              {...register("email", { required: "Email is required" })}
+              helperText={errors.email?.message ?? (emailRequiredForRole ? undefined : "Optional for Display accounts")}
+              {...register("email", { required: emailRequiredForRole && "Email is required" })}
             />
             <TextField label="Phone" fullWidth {...register("phone")} />
             {/* A Controller, not register(), and deliberately no

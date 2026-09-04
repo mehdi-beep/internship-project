@@ -3,6 +3,7 @@ import type { PeriodMode } from "../components/PeriodModeSelector";
 import type {
   AdminDashboard,
   AdminDashboardCharts,
+  CeoDashboard,
   ChefDashboard,
   ChefDashboardCharts,
   TechnicianDashboard,
@@ -12,6 +13,7 @@ import type {
 export const getTechnicianDashboard = () => fetchOne<TechnicianDashboard>("/dashboard/technician");
 export const getSupervisorDashboard = () => fetchOne<ChefDashboard>("/dashboard/supervisor");
 export const getAdminDashboard = () => fetchOne<AdminDashboard>("/dashboard/admin");
+export const getCeoDashboard = () => fetchOne<CeoDashboard>("/dashboard/ceo");
 
 export const getTechnicianDashboardCharts = (mode: PeriodMode, anchor: string) =>
   fetchOne<TechnicianDashboardCharts>(`/dashboard/technician/charts?mode=${mode}&anchor=${anchor}`);

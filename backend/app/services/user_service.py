@@ -47,7 +47,13 @@ def _ensure_username_available(db: Session, username: str, exclude_id: int | Non
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already in use.")
 
 
-def _ensure_email_available(db: Session, email: str, exclude_id: int | None = None) -> None:
+def _ensure_email_available(db: Session, email: str | None, exclude_id: int | None = None) -> None:
+    # None only reaches here for a Display account (the schema's
+    # _require_email_unless_display validator enforces this for every other
+    # role) — nothing to check, since a null email can't collide with
+    # anything (the column's unique constraint doesn't treat NULLs as equal).
+    if email is None:
+        return
     existing = user_repository.find_by_email(db, email)
     if existing is not None and existing.id != exclude_id:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already in use.")

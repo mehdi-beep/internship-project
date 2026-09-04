@@ -99,3 +99,29 @@ export interface AdminDashboardCharts {
   client_activity_chart: ChartPoint[];
   city_activity_chart: ChartPoint[];
 }
+
+export interface CeoDashboard {
+  total_interventions: number;
+  completed_interventions: number;
+  pending_interventions: number;
+  rejected_interventions: number;
+  approval_rate: number;
+  rejection_rate: number;
+  average_intervention_duration_minutes: number;
+  total_clients: number;
+  active_clients: number;
+  total_technicians: number;
+  active_technicians: number;
+  active_contracts: number;
+  contracts_expiring_soon: number;
+  active_projects: number;
+  upcoming_planned_interventions: number;
+  urgent_planning_count: number;
+  monthly_intervention_trend_chart: ChartPoint[];
+  completion_trend_chart: ChartPoint[];
+  technician_workload_chart: ChartPoint[];
+  top_clients_chart: ChartPoint[];
+  contract_activity_chart: ChartPoint[];
+  project_activity_chart: ChartPoint[];
+  priority_distribution_chart: ChartPoint[];
+}

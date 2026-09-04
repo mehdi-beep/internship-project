@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Alert, Box, Button, FormControlLabel, MenuItem, Stack, Switch, Tab, Tabs, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import dayjs from "dayjs";
@@ -165,6 +165,14 @@ export default function MyInterventionsPage() {
         colleague_technician_id: assistedOnly && isTechnician ? user?.id : undefined,
       }),
     enabled: viewMode === "calendar",
+    // Without this, `calendarData` resets to undefined the instant
+    // calendarRange changes (every prev/next/today click, since it's part of
+    // the query key above) — calendarRows.length briefly reads 0, which
+    // renders "No interventions found" and unmounts <GenericCalendar>,
+    // destroying FullCalendar's own internal current-month pointer. Keeping
+    // the previous page's data visible during the refetch avoids both the
+    // false-empty flash and the resulting reset-to-today on remount.
+    placeholderData: keepPreviousData,
   });
 
   const { data: clientsData } = useQuery({
@@ -435,11 +443,17 @@ export default function MyInterventionsPage() {
             setPage(1);
           }}
         />
-      ) : calendarRows.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
-          No interventions found.
-        </Typography>
       ) : (
+        // Always mounted once in calendar mode — previously this branched on
+        // calendarRows.length === 0 to show a "No interventions found" message
+        // instead, which unmounted <GenericCalendar> (and the FullCalendar
+        // instance inside it) on every empty/in-flight result. Losing that
+        // mount destroyed FullCalendar's own internal current-month pointer,
+        // so navigating past an empty month reset the view to today on
+        // remount instead of continuing to the next month. An empty events
+        // array renders as a normal empty calendar grid, which is the
+        // correct, expected behavior for "no interventions this period" —
+        // no separate message needed.
         <GenericCalendar
           events={calendarEvents}
           onVisibleRangeChange={(range) => setCalendarRange({ date_from: range.start, date_to: range.end })}

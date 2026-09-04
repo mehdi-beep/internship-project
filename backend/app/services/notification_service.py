@@ -176,12 +176,16 @@ def notify_chefs_of_submission(db: Session, bi_number: str, intervention_id: int
 
 
 def notify_admins_of_technical_approval(db: Session, bi_number: str, intervention_id: int) -> None:
-    """Ch.25 — Administration Supervisor is notified once technical approval completes."""
+    """Ch.25 — Administration Supervisor is notified once technical approval
+    completes. The CEO is notified too (Task 15 — CEO shares administrative
+    approval power with Admin, so this is the one workflow moment genuinely
+    relevant to a CEO, not a blanket copy of every technician notification)."""
     stmt = user_repository.list_query(role=RoleName.ADMIN_SUPERVISOR, active_only=True, search=None)
-    for admin in db.scalars(stmt).all():
+    ceo_stmt = user_repository.list_query(role=RoleName.CEO, active_only=True, search=None)
+    for recipient in [*db.scalars(stmt).all(), *db.scalars(ceo_stmt).all()]:
         notification_repository.create(
             db,
-            user_id=admin.id,
+            user_id=recipient.id,
             title="Administrative Approval Needed",
             message=f"Intervention {bi_number} passed technical approval and is awaiting administrative approval.",
             related_intervention_id=intervention_id,

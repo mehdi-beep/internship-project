@@ -20,7 +20,7 @@ settings = get_settings()
 
 
 def _is_privileged(user: User) -> bool:
-    return user.role.name in (RoleName.CHEF_TECHNICIEN, RoleName.ADMIN_SUPERVISOR)
+    return user.role.name in (RoleName.CHEF_TECHNICIEN, RoleName.ADMIN_SUPERVISOR, RoleName.CEO)
 
 
 @router.post("", response_model=ApiResponse[AttachmentOut])

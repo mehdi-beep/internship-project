@@ -16,7 +16,7 @@ export default function TechnicianPerformanceDashboardContent() {
     <QueryStateGate isLoading={isLoading} isError={isError} error={error} onRetry={refetch}>
       {(data?.length ?? 0) === 0 ? (
         <Typography variant="body2" color="text.secondary">
-          No technicians found.
+          No employees found.
         </Typography>
       ) : (
         <Grid container spacing={2}>

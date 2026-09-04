@@ -82,6 +82,52 @@ def test_admin_dashboard_shape_and_rates(client, auth_headers):
     assert client.get("/api/dashboard/admin", headers=chef).status_code == 403
 
 
+def test_ceo_dashboard_shape_and_role_gating(client, auth_headers):
+    ceo = auth_headers("ceo01")
+    admin = auth_headers("admin01")
+    chef = auth_headers("chef01")
+
+    response = client.get("/api/dashboard/ceo", headers=ceo)
+    assert response.status_code == 200
+    data = response.json()["data"]
+    for key in [
+        "total_interventions", "completed_interventions", "pending_interventions", "rejected_interventions",
+        "approval_rate", "rejection_rate", "average_intervention_duration_minutes",
+        "total_clients", "active_clients", "total_technicians", "active_technicians",
+        "active_contracts", "contracts_expiring_soon", "active_projects",
+        "upcoming_planned_interventions", "urgent_planning_count",
+        "monthly_intervention_trend_chart", "completion_trend_chart", "technician_workload_chart",
+        "top_clients_chart", "contract_activity_chart", "project_activity_chart", "priority_distribution_chart",
+    ]:
+        assert key in data
+
+    assert 0 <= data["approval_rate"] <= 100
+    assert 0 <= data["rejection_rate"] <= 100
+    assert len(data["monthly_intervention_trend_chart"]) == 12
+    assert len(data["completion_trend_chart"]) == 12
+    assert len(data["priority_distribution_chart"]) == 3
+    assert data["total_technicians"] == 10
+    # Funnel components must be internally consistent with the seeded data —
+    # each bucket is a distinct, non-overlapping status subset of the total.
+    assert data["completed_interventions"] <= data["total_interventions"]
+    assert data["rejected_interventions"] <= data["total_interventions"]
+    assert data["pending_interventions"] <= data["total_interventions"]
+
+    # This is CEO-exclusive content, unlike /admin which admin_supervisor also
+    # sees — neither Admin nor Chef may access it.
+    assert client.get("/api/dashboard/ceo", headers=admin).status_code == 403
+    assert client.get("/api/dashboard/ceo", headers=chef).status_code == 403
+
+
+def test_ceo_dashboard_charts_are_bounded(client, auth_headers):
+    """Ch.115 — same summarized-statistics requirement as the other dashboards."""
+    ceo = auth_headers("ceo01")
+    data = client.get("/api/dashboard/ceo", headers=ceo).json()["data"]
+    assert len(data["top_clients_chart"]) <= 10
+    assert len(data["contract_activity_chart"]) <= 10
+    assert len(data["project_activity_chart"]) <= 10
+
+
 def test_dashboard_lists_and_charts_are_bounded(client, auth_headers):
     """Ch.115 — the backend must return summarized statistics, never raw dataset dumps."""
     chef = auth_headers("chef01")

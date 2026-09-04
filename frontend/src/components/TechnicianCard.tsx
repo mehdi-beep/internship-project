@@ -21,6 +21,8 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 }
 
 export default function TechnicianCard({ technician, onClick }: TechnicianCardProps) {
+  const isApprover = technician.role === "chef_technicien" || technician.role === "admin_supervisor";
+
   return (
     <Card variant="outlined" sx={{ cursor: "pointer", height: "100%" }} onClick={onClick}>
       <CardContent>
@@ -28,18 +30,35 @@ export default function TechnicianCard({ technician, onClick }: TechnicianCardPr
           {technician.full_name}
         </Typography>
         <Stack spacing={0.75}>
-          <Stat label="Points" value={technician.total_points} />
-          <Stat label="Total Interventions" value={technician.total_interventions} />
-          <Stat label="Approved" value={technician.completed_interventions} />
-          <Stat label="Current Workload" value={technician.pending_interventions} />
-          <Stat
-            label="Next Planned"
-            value={
-              technician.next_planned_date
-                ? `${dayjs(technician.next_planned_date).format("MMM D")} — ${technician.next_planned_client_name}`
-                : "None scheduled"
-            }
-          />
+          {isApprover ? (
+            <>
+              <Stat label="Approvals Processed" value={technician.approvals_processed ?? 0} />
+              <Stat label="Approvals Rejected" value={technician.approvals_rejected ?? 0} />
+              <Stat
+                label="Avg Turnaround"
+                value={
+                  technician.avg_turnaround_minutes !== null
+                    ? `${Math.round(technician.avg_turnaround_minutes)} min`
+                    : "N/A"
+                }
+              />
+            </>
+          ) : (
+            <>
+              <Stat label="Points" value={technician.total_points} />
+              <Stat label="Total Interventions" value={technician.total_interventions} />
+              <Stat label="Approved" value={technician.completed_interventions} />
+              <Stat label="Current Workload" value={technician.pending_interventions} />
+              <Stat
+                label="Next Planned"
+                value={
+                  technician.next_planned_date
+                    ? `${dayjs(technician.next_planned_date).format("MMM D")} — ${technician.next_planned_client_name}`
+                    : "None scheduled"
+                }
+              />
+            </>
+          )}
         </Stack>
       </CardContent>
     </Card>

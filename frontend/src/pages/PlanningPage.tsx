@@ -261,13 +261,19 @@ export default function PlanningPage() {
         </Alert>
       )}
 
-      {!isLoading && !isError && activeEntries.length === 0 && (
-        <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
-          No planning available.
-        </Typography>
-      )}
-
-      {!isLoading && !isError && activeEntries.length > 0 && (
+      {!isLoading && !isError && (
+        // Always mounted once loaded, regardless of activeEntries.length —
+        // previously this branched on length === 0 to show a "No planning
+        // available" message instead, unmounting <PlanningCalendar> (and the
+        // FullCalendar instance inside it) any time the list was empty,
+        // including transiently while a create/update/cancel mutation's
+        // invalidateQueries-triggered refetch was in flight. That looked
+        // exactly like "the calendar doesn't refresh after saving" even
+        // though the underlying query genuinely did update — the remount
+        // just reset the visible calendar state at the same moment. An empty
+        // entries array renders as a normal empty calendar grid, which is
+        // the correct behavior for "nothing planned" — no separate message
+        // needed.
         <PlanningCalendar entries={activeEntries} eventLabel={eventLabel} onEventClick={openEdit} />
       )}
 

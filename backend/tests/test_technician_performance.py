@@ -21,15 +21,58 @@ class TestRoleGating:
 class TestSummaryList:
     def test_returns_all_active_technicians_with_expected_fields(self, client, auth_headers):
         summaries = client.get("/api/technician-performance", headers=auth_headers("chef01")).json()["data"]
-        assert len(summaries) == 10  # seeded: 10 technicians
-        first = summaries[0]
+        # seeded: 10 technicians + 2 chefs + 2 admins (ceo/display excluded)
+        assert len(summaries) == 14
+        technician_rows = [s for s in summaries if s["role"] == "technician"]
+        assert len(technician_rows) == 10
+        first = technician_rows[0]
         for field in (
-            "technician_id", "full_name", "total_interventions", "completed_interventions",
+            "technician_id", "full_name", "role", "total_interventions", "completed_interventions",
             "pending_interventions", "rejected_interventions", "warranty_interventions",
             "total_points", "average_duration_minutes", "planned_count",
             "completed_vs_planned_ratio", "colleague_participation_count",
         ):
             assert field in first
+
+    def test_ceo_and_display_excluded_from_list(self, client, auth_headers):
+        summaries = client.get("/api/technician-performance", headers=auth_headers("chef01")).json()["data"]
+        assert all(s["role"] not in ("ceo", "display") for s in summaries)
+
+    def test_chef_rows_have_approval_metrics_and_no_intervention_metrics(self, client, auth_headers):
+        summaries = client.get("/api/technician-performance", headers=auth_headers("admin01")).json()["data"]
+        chef_rows = [s for s in summaries if s["role"] == "chef_technicien"]
+        assert len(chef_rows) == 2
+        for row in chef_rows:
+            assert row["approvals_processed"] is not None
+            assert row["approvals_rejected"] is not None
+            # Seed data always gives technical approvals real submission_date
+            # timestamps to measure turnaround from, so this should resolve
+            # to a real number whenever at least one approval was processed.
+            if row["approvals_processed"] or row["approvals_rejected"]:
+                assert row["avg_turnaround_minutes"] is not None
+            # Technician-only fields stay at their unpopulated defaults.
+            assert row["total_interventions"] == 0
+            assert row["total_points"] == 0
+
+    def test_admin_rows_have_approval_metrics_and_no_intervention_metrics(self, client, auth_headers):
+        summaries = client.get("/api/technician-performance", headers=auth_headers("chef01")).json()["data"]
+        admin_rows = [s for s in summaries if s["role"] == "admin_supervisor"]
+        assert len(admin_rows) == 2
+        for row in admin_rows:
+            assert row["approvals_processed"] is not None
+            assert row["approvals_rejected"] is not None
+            if row["approvals_processed"] or row["approvals_rejected"]:
+                assert row["avg_turnaround_minutes"] is not None
+            assert row["total_interventions"] == 0
+            assert row["total_points"] == 0
+
+    def test_technician_rows_have_no_approval_metrics(self, client, auth_headers):
+        summaries = client.get("/api/technician-performance", headers=auth_headers("admin01")).json()["data"]
+        technician_rows = [s for s in summaries if s["role"] == "technician"]
+        for row in technician_rows:
+            assert row["approvals_processed"] is None
+            assert row["approvals_rejected"] is None
+            assert row["avg_turnaround_minutes"] is None
 
 
 class TestDetail:
@@ -45,10 +88,33 @@ class TestDetail:
         response = client.get("/api/technician-performance/999999", headers=auth_headers("admin01"))
         assert response.status_code == 404
 
-    def test_non_technician_id_404s(self, client, auth_headers):
+    def test_ceo_and_display_ids_404(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        ceo_id = client.get("/api/auth/me", headers=auth_headers("ceo01")).json()["data"]["id"]
+        display_id = client.get("/api/auth/me", headers=auth_headers("display01")).json()["data"]["id"]
+        assert client.get(f"/api/technician-performance/{ceo_id}", headers=admin).status_code == 404
+        assert client.get(f"/api/technician-performance/{display_id}", headers=admin).status_code == 404
+
+    def test_chef_id_returns_approval_detail(self, client, auth_headers):
         chef_id = client.get("/api/auth/me", headers=auth_headers("chef01")).json()["data"]["id"]
-        response = client.get(f"/api/technician-performance/{chef_id}", headers=auth_headers("admin01"))
-        assert response.status_code == 404
+        detail = client.get(f"/api/technician-performance/{chef_id}", headers=auth_headers("admin01")).json()["data"]
+        assert detail["technician_id"] == chef_id
+        assert detail["role"] == "chef_technicien"
+        assert detail["approvals_processed"] is not None
+        assert detail["approvals_rejected"] is not None
+        assert len(detail["monthly_activity_chart"]) == 6
+        assert len(detail["weekly_activity_chart"]) == 7
+        assert "email" in detail and "active" in detail
+
+    def test_admin_id_returns_approval_detail(self, client, auth_headers):
+        admin_id = client.get("/api/auth/me", headers=auth_headers("admin01")).json()["data"]["id"]
+        detail = client.get(f"/api/technician-performance/{admin_id}", headers=auth_headers("chef01")).json()["data"]
+        assert detail["technician_id"] == admin_id
+        assert detail["role"] == "admin_supervisor"
+        assert detail["approvals_processed"] is not None
+        assert detail["approvals_rejected"] is not None
+        assert len(detail["monthly_activity_chart"]) == 6
+        assert len(detail["weekly_activity_chart"]) == 7
 
 
 class TestSelfServiceMeEndpoint:

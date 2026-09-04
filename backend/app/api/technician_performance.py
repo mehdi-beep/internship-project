@@ -10,7 +10,7 @@ from app.services import technician_performance_service
 
 router = APIRouter(prefix="/technician-performance", tags=["technician-performance"])
 
-SUPERVISOR_ROLES = ("chef_technicien", "admin_supervisor")
+SUPERVISOR_ROLES = ("chef_technicien", "admin_supervisor", "ceo")
 
 
 @router.get("", response_model=ApiResponse[list[TechnicianPerformanceSummary]])

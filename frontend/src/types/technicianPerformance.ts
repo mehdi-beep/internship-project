@@ -3,6 +3,10 @@ import type { ChartPoint } from "./dashboard";
 export interface TechnicianPerformanceSummary {
   technician_id: number;
   full_name: string;
+  role: string;
+
+  // Technician-only fields — populated for technician rows, left at their
+  // defaults (0) for chef/admin rows.
   total_interventions: number;
   completed_interventions: number;
   pending_interventions: number;
@@ -15,6 +19,12 @@ export interface TechnicianPerformanceSummary {
   colleague_participation_count: number;
   next_planned_date: string | null;
   next_planned_client_name: string | null;
+
+  // Chef/admin-only fields — populated for chef (technical approvals) and
+  // admin (administrative approvals) rows, null for technician rows.
+  approvals_processed: number | null;
+  approvals_rejected: number | null;
+  avg_turnaround_minutes: number | null;
 }
 
 export interface TechnicianPerformanceDetail extends TechnicianPerformanceSummary {

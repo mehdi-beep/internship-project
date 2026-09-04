@@ -25,7 +25,7 @@ ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor", "ceo")
 
 
 def _is_privileged(user: User) -> bool:
-    return user.role.name in (RoleName.CHEF_TECHNICIEN, RoleName.ADMIN_SUPERVISOR)
+    return user.role.name in (RoleName.CHEF_TECHNICIEN, RoleName.ADMIN_SUPERVISOR, RoleName.CEO)
 
 
 @router.get("", response_model=ApiResponse[Page[InterventionOut]])

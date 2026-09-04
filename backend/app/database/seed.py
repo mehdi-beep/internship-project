@@ -146,6 +146,140 @@ TRAVAUX_CATALOG: list[tuple[str, str, str | None]] = [
     ("700-999", "INSTALLATION DIVERS", None),
 ]
 
+# Legacy generic/placeholder catalog (predates TRAVAUX_CATALOG above being
+# replaced with the client's real codes). Kept as a separate, explicitly-named
+# list — by request — rather than merged into TRAVAUX_CATALOG, since these are
+# not real company travaux and merging them in would make them indistinguishable
+# from the genuine spreadsheet-sourced entries above. Codes are plain numbers
+# (101-225), so there's no collision risk with the real "700-..." codes.
+LEGACY_PLACEHOLDER_TRAVAUX_CATALOG: list[tuple[str, str, str | None]] = [
+    ('101', 'Firewall Installation', 'Network'),
+    ('102', 'Firewall Installation — Type A', 'Network'),
+    ('103', 'Firewall Installation — Type B', 'Network'),
+    ('104', 'Firewall Installation — Standard', 'Network'),
+    ('105', 'Firewall Installation — Advanced', 'Network'),
+    ('106', 'Fiber Repair', 'Network'),
+    ('107', 'Fiber Repair — Type A', 'Network'),
+    ('108', 'Fiber Repair — Type B', 'Network'),
+    ('109', 'Fiber Repair — Standard', 'Network'),
+    ('110', 'Fiber Repair — Advanced', 'Network'),
+    ('111', 'Server Maintenance', 'Infrastructure'),
+    ('112', 'Server Maintenance — Type A', 'Infrastructure'),
+    ('113', 'Server Maintenance — Type B', 'Infrastructure'),
+    ('114', 'Server Maintenance — Standard', 'Infrastructure'),
+    ('115', 'Server Maintenance — Advanced', 'Infrastructure'),
+    ('116', 'Camera Configuration', 'Security'),
+    ('117', 'Camera Configuration — Type A', 'Security'),
+    ('118', 'Camera Configuration — Type B', 'Security'),
+    ('119', 'Camera Configuration — Standard', 'Security'),
+    ('120', 'Camera Configuration — Advanced', 'Security'),
+    ('121', 'Router Replacement', 'Network'),
+    ('122', 'Router Replacement — Type A', 'Network'),
+    ('123', 'Router Replacement — Type B', 'Network'),
+    ('124', 'Router Replacement — Standard', 'Network'),
+    ('125', 'Router Replacement — Advanced', 'Network'),
+    ('126', 'Switch Configuration', 'Network'),
+    ('127', 'Switch Configuration — Type A', 'Network'),
+    ('128', 'Switch Configuration — Type B', 'Network'),
+    ('129', 'Switch Configuration — Standard', 'Network'),
+    ('130', 'Switch Configuration — Advanced', 'Network'),
+    ('131', 'UPS Battery Replacement', 'Infrastructure'),
+    ('132', 'UPS Battery Replacement — Type A', 'Infrastructure'),
+    ('133', 'UPS Battery Replacement — Type B', 'Infrastructure'),
+    ('134', 'UPS Battery Replacement — Standard', 'Infrastructure'),
+    ('135', 'UPS Battery Replacement — Advanced', 'Infrastructure'),
+    ('136', 'Access Point Installation', 'Network'),
+    ('137', 'Access Point Installation — Type A', 'Network'),
+    ('138', 'Access Point Installation — Type B', 'Network'),
+    ('139', 'Access Point Installation — Standard', 'Network'),
+    ('140', 'Access Point Installation — Advanced', 'Network'),
+    ('141', 'VPN Setup', 'Network'),
+    ('142', 'VPN Setup — Type A', 'Network'),
+    ('143', 'VPN Setup — Type B', 'Network'),
+    ('144', 'VPN Setup — Standard', 'Network'),
+    ('145', 'VPN Setup — Advanced', 'Network'),
+    ('146', 'Antivirus Deployment', 'Security'),
+    ('147', 'Antivirus Deployment — Type A', 'Security'),
+    ('148', 'Antivirus Deployment — Type B', 'Security'),
+    ('149', 'Antivirus Deployment — Standard', 'Security'),
+    ('150', 'Antivirus Deployment — Advanced', 'Security'),
+    ('151', 'Backup Configuration', 'Infrastructure'),
+    ('152', 'Backup Configuration — Type A', 'Infrastructure'),
+    ('153', 'Backup Configuration — Type B', 'Infrastructure'),
+    ('154', 'Backup Configuration — Standard', 'Infrastructure'),
+    ('155', 'Backup Configuration — Advanced', 'Infrastructure'),
+    ('156', 'Printer Installation', 'Hardware'),
+    ('157', 'Printer Installation — Type A', 'Hardware'),
+    ('158', 'Printer Installation — Type B', 'Hardware'),
+    ('159', 'Printer Installation — Standard', 'Hardware'),
+    ('160', 'Printer Installation — Advanced', 'Hardware'),
+    ('161', 'Workstation Setup', 'Hardware'),
+    ('162', 'Workstation Setup — Type A', 'Hardware'),
+    ('163', 'Workstation Setup — Type B', 'Hardware'),
+    ('164', 'Workstation Setup — Standard', 'Hardware'),
+    ('165', 'Workstation Setup — Advanced', 'Hardware'),
+    ('166', 'Cabling — Cat6', 'Network'),
+    ('167', 'Cabling — Cat6 — Type A', 'Network'),
+    ('168', 'Cabling — Cat6 — Type B', 'Network'),
+    ('169', 'Cabling — Cat6 — Standard', 'Network'),
+    ('170', 'Cabling — Cat6 — Advanced', 'Network'),
+    ('171', 'PABX Maintenance', 'Telephony'),
+    ('172', 'PABX Maintenance — Type A', 'Telephony'),
+    ('173', 'PABX Maintenance — Type B', 'Telephony'),
+    ('174', 'PABX Maintenance — Standard', 'Telephony'),
+    ('175', 'PABX Maintenance — Advanced', 'Telephony'),
+    ('176', 'Alarm System Check', 'Security'),
+    ('177', 'Alarm System Check — Type A', 'Security'),
+    ('178', 'Alarm System Check — Type B', 'Security'),
+    ('179', 'Alarm System Check — Standard', 'Security'),
+    ('180', 'Alarm System Check — Advanced', 'Security'),
+    ('181', 'CCTV Recorder Replacement', 'Security'),
+    ('182', 'CCTV Recorder Replacement — Type A', 'Security'),
+    ('183', 'CCTV Recorder Replacement — Type B', 'Security'),
+    ('184', 'CCTV Recorder Replacement — Standard', 'Security'),
+    ('185', 'CCTV Recorder Replacement — Advanced', 'Security'),
+    ('186', 'Load Balancer Configuration', 'Network'),
+    ('187', 'Load Balancer Configuration — Type A', 'Network'),
+    ('188', 'Load Balancer Configuration — Type B', 'Network'),
+    ('189', 'Load Balancer Configuration — Standard', 'Network'),
+    ('190', 'Load Balancer Configuration — Advanced', 'Network'),
+    ('191', 'Data Migration', 'Infrastructure'),
+    ('192', 'Data Migration — Type A', 'Infrastructure'),
+    ('193', 'Data Migration — Type B', 'Infrastructure'),
+    ('194', 'Data Migration — Standard', 'Infrastructure'),
+    ('195', 'Data Migration — Advanced', 'Infrastructure'),
+    ('196', 'Software Update Rollout', 'Infrastructure'),
+    ('197', 'Software Update Rollout — Type A', 'Infrastructure'),
+    ('198', 'Software Update Rollout — Type B', 'Infrastructure'),
+    ('199', 'Software Update Rollout — Standard', 'Infrastructure'),
+    ('200', 'Software Update Rollout — Advanced', 'Infrastructure'),
+    ('201', 'Network Diagnostics', 'Network'),
+    ('202', 'Network Diagnostics — Type A', 'Network'),
+    ('203', 'Network Diagnostics — Type B', 'Network'),
+    ('204', 'Network Diagnostics — Standard', 'Network'),
+    ('205', 'Network Diagnostics — Advanced', 'Network'),
+    ('206', 'Cable Termination', 'Network'),
+    ('207', 'Cable Termination — Type A', 'Network'),
+    ('208', 'Cable Termination — Type B', 'Network'),
+    ('209', 'Cable Termination — Standard', 'Network'),
+    ('210', 'Cable Termination — Advanced', 'Network'),
+    ('211', 'Rack Installation', 'Infrastructure'),
+    ('212', 'Rack Installation — Type A', 'Infrastructure'),
+    ('213', 'Rack Installation — Type B', 'Infrastructure'),
+    ('214', 'Rack Installation — Standard', 'Infrastructure'),
+    ('215', 'Rack Installation — Advanced', 'Infrastructure'),
+    ('216', 'Wireless Site Survey', 'Network'),
+    ('217', 'Wireless Site Survey — Type A', 'Network'),
+    ('218', 'Wireless Site Survey — Type B', 'Network'),
+    ('219', 'Wireless Site Survey — Standard', 'Network'),
+    ('220', 'Wireless Site Survey — Advanced', 'Network'),
+    ('221', 'Badge Reader Installation', 'Security'),
+    ('222', 'Badge Reader Installation — Type A', 'Security'),
+    ('223', 'Badge Reader Installation — Type B', 'Security'),
+    ('224', 'Badge Reader Installation — Standard', 'Security'),
+    ('225', 'Badge Reader Installation — Advanced', 'Security'),
+]
+
 # Statuses assigned to bulk-generated interventions, weighted toward the end
 # of the pipeline (Fully Approved) since the company has "been using the
 # application for several months" (Ch.51) — most historical work is finished.
@@ -412,10 +546,13 @@ def seed_contracts_and_projects(db: Session, clients: list[Client]) -> tuple[lis
 def seed_travaux(db: Session) -> list[Travail]:
     """Ch.51: the client's real technical-operations catalog, seeded verbatim
     (see TRAVAUX_CATALOG's own comment) — one row per real code, no synthetic
-    variant-padding, unlike the placeholder catalog this replaced."""
+    variant-padding, unlike the placeholder catalog this replaced. Also seeds
+    LEGACY_PLACEHOLDER_TRAVAUX_CATALOG's 125 rows alongside it, by explicit
+    request, despite those not being real company data — see that list's own
+    comment for why it's kept separate rather than merged in."""
     travaux = [
         Travail(travail_code=code, travail_name=name, category=category, active=True)
-        for code, name, category in TRAVAUX_CATALOG
+        for code, name, category in TRAVAUX_CATALOG + LEGACY_PLACEHOLDER_TRAVAUX_CATALOG
     ]
     db.add_all(travaux)
     db.flush()

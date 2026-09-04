@@ -10,6 +10,7 @@ from app.schemas.common import ApiResponse
 from app.schemas.dashboard import (
     AdminDashboard,
     AdminDashboardCharts,
+    CeoDashboard,
     ChefDashboard,
     ChefDashboardCharts,
     TechnicianDashboard,
@@ -73,3 +74,11 @@ def admin_dashboard_charts(
     _: User = Depends(require_roles("admin_supervisor", "ceo")),
 ) -> ApiResponse[AdminDashboardCharts]:
     return ApiResponse(data=dashboard_service.get_admin_dashboard_charts(db, mode, anchor))
+
+
+@router.get("/ceo", response_model=ApiResponse[CeoDashboard])
+def ceo_dashboard(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("ceo")),
+) -> ApiResponse[CeoDashboard]:
+    return ApiResponse(data=dashboard_service.get_ceo_dashboard(db))

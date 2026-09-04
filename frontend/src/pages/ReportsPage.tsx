@@ -206,13 +206,28 @@ export default function ReportsPage() {
           )}
 
           {interventionReport && (
-            <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: "wrap" }}>
-              <Chip label={`${interventionReport.summary.total_interventions} interventions`} />
-              <Chip label={`${(interventionReport.summary.total_duration_minutes / 60).toFixed(1)}h total`} />
-              <Chip label={`${interventionReport.summary.total_points} points`} />
-              <Chip label={`${interventionReport.summary.fully_approved_count} approved`} color="success" />
-              <Chip label={`${interventionReport.summary.rejected_count} rejected`} color="error" />
-            </Stack>
+            <>
+              {!dateFrom && !dateTo && (interventionReport.date_from || interventionReport.date_to) && (
+                // report_service.py's generate_intervention_report defaults
+                // date-scoped report types (daily/weekly/monthly/yearly) to a
+                // trailing window when no explicit dates are given — the
+                // count above is real, just scoped to that window, not the
+                // whole table. This surfaces the actual resolved range the
+                // backend already returns (InterventionReport.date_from/
+                // date_to) so that scoping isn't silently invisible.
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Showing results from {interventionReport.date_from ? dayjs(interventionReport.date_from).format("MMM D, YYYY") : "the beginning"} to{" "}
+                  {interventionReport.date_to ? dayjs(interventionReport.date_to).format("MMM D, YYYY") : "today"}. Set explicit dates above to change this range.
+                </Alert>
+              )}
+              <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: "wrap" }}>
+                <Chip label={`${interventionReport.summary.total_interventions} interventions`} />
+                <Chip label={`${(interventionReport.summary.total_duration_minutes / 60).toFixed(1)}h total`} />
+                <Chip label={`${interventionReport.summary.total_points} points`} />
+                <Chip label={`${interventionReport.summary.fully_approved_count} approved`} color="success" />
+                <Chip label={`${interventionReport.summary.rejected_count} rejected`} color="error" />
+              </Stack>
+            </>
           )}
 
           <DataTable

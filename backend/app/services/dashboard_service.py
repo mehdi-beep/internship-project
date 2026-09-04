@@ -7,15 +7,18 @@ from sqlalchemy.orm import Session
 from app.models.approval_history import ApprovalHistory
 from app.models.client import Client
 from app.models.client_site import ClientSite
+from app.models.contract import Contract
 from app.models.intervention import Intervention
-from app.models.enums import ApprovalDecision, InterventionStatus, Priority
+from app.models.enums import ApprovalDecision, ContractStatus, InterventionStatus, PlanningStatus, Priority, ProjectStatus
 from app.models.planning import Planning
+from app.models.project import Project
 from app.models.role import RoleName
 from app.models.user import User
 from app.schemas.dashboard import (
     ActionableInterventionSummary,
     AdminDashboard,
     AdminDashboardCharts,
+    CeoDashboard,
     ChartPoint,
     ChefDashboard,
     ChefDashboardCharts,
@@ -739,4 +742,210 @@ def get_admin_dashboard(db: Session) -> AdminDashboard:
         points_distribution_chart=points_distribution_chart,
         client_activity_chart=client_activity_chart,
         city_activity_chart=city_activity_chart,
+    )
+
+
+# ---------------------------------------------------------------------------
+# CEO dashboard (Task 7) — company-wide roll-up, deliberately all-time and
+# cross-cutting rather than the Admin dashboard's "this month" operational
+# approval-queue framing. Reuses APPROVAL_PENDING_STATUSES (module-level,
+# above) so "pending" means the same pipeline states everywhere in this file.
+# ---------------------------------------------------------------------------
+
+
+def monthly_intervention_trend_series(db: Session, month_start: date, months: int) -> list[ChartPoint]:
+    """Like monthly_interventions_series but over a caller-chosen horizon —
+    the CEO trend uses 12 months (a year-over-shape view) instead of the
+    other dashboards' fixed 6-month trailing window."""
+    points = []
+    for months_back in range(months - 1, -1, -1):
+        target_month = _shift_month(month_start, -months_back)
+        target_next = _shift_month(target_month, 1)
+        count = db.scalar(
+            select(func.count())
+            .select_from(Intervention)
+            .where(Intervention.intervention_date >= target_month, Intervention.intervention_date < target_next)
+        ) or 0
+        points.append(ChartPoint(label=target_month.strftime("%b %y"), value=count))
+    return points
+
+
+def monthly_completion_trend_series(db: Session, month_start: date, months: int) -> list[ChartPoint]:
+    """Completed (fully approved) interventions per month — the completion
+    half of the trend pair above, dated by when the work itself happened
+    rather than when it cleared administrative approval."""
+    points = []
+    for months_back in range(months - 1, -1, -1):
+        target_month = _shift_month(month_start, -months_back)
+        target_next = _shift_month(target_month, 1)
+        count = db.scalar(
+            select(func.count())
+            .select_from(Intervention)
+            .where(
+                Intervention.status == InterventionStatus.FULLY_APPROVED,
+                Intervention.intervention_date >= target_month,
+                Intervention.intervention_date < target_next,
+            )
+        ) or 0
+        points.append(ChartPoint(label=target_month.strftime("%b %y"), value=count))
+    return points
+
+
+def get_ceo_dashboard(db: Session) -> CeoDashboard:
+    today = _today()
+    month_start = _month_start()
+
+    total_interventions = db.scalar(select(func.count()).select_from(Intervention)) or 0
+
+    completed_interventions = db.scalar(
+        select(func.count()).select_from(Intervention).where(Intervention.status == InterventionStatus.FULLY_APPROVED)
+    ) or 0
+
+    pending_interventions = db.scalar(
+        select(func.count()).select_from(Intervention).where(Intervention.status.in_(APPROVAL_PENDING_STATUSES))
+    ) or 0
+
+    rejected_interventions = db.scalar(
+        select(func.count()).select_from(Intervention).where(Intervention.status == InterventionStatus.REJECTED)
+    ) or 0
+
+    # Ch.111 formula (Approved or Rejected / Submitted x 100), same as Admin's
+    # rate but computed all-time rather than restricted to "this month" — a
+    # company-health figure, not an operational monthly snapshot.
+    submitted_total = db.scalar(
+        select(func.count()).select_from(Intervention).where(Intervention.submission_date.is_not(None))
+    ) or 0
+    approval_rate = round((completed_interventions / submitted_total) * 100, 1) if submitted_total else 0.0
+    rejection_rate = round((rejected_interventions / submitted_total) * 100, 1) if submitted_total else 0.0
+
+    avg_duration = db.scalar(select(func.avg(Intervention.net_duration_minutes))) or 0
+
+    total_clients = db.scalar(select(func.count()).select_from(Client)) or 0
+    active_clients = db.scalar(select(func.count()).select_from(Client).where(Client.active.is_(True))) or 0
+
+    total_technicians = db.scalar(
+        select(func.count()).select_from(User).where(User.role.has(name=RoleName.TECHNICIAN))
+    ) or 0
+    active_technicians = db.scalar(
+        select(func.count()).select_from(User).where(User.role.has(name=RoleName.TECHNICIAN), User.active.is_(True))
+    ) or 0
+
+    active_contracts = db.scalar(
+        select(func.count()).select_from(Contract).where(Contract.status == ContractStatus.ACTIVE)
+    ) or 0
+    # "Expiring soon" = active and ending within 60 days — a lead-time an
+    # executive would want a renewal decision on, not yet urgent enough to be
+    # an operational Admin-dashboard concern.
+    expiry_horizon = today + timedelta(days=60)
+    contracts_expiring_soon = db.scalar(
+        select(func.count())
+        .select_from(Contract)
+        .where(
+            Contract.status == ContractStatus.ACTIVE,
+            Contract.end_date.is_not(None),
+            Contract.end_date >= today,
+            Contract.end_date <= expiry_horizon,
+        )
+    ) or 0
+
+    active_projects = db.scalar(
+        select(func.count()).select_from(Project).where(Project.status == ProjectStatus.ACTIVE)
+    ) or 0
+
+    upcoming_planned_interventions = db.scalar(
+        select(func.count())
+        .select_from(Planning)
+        .where(Planning.planned_date >= today, Planning.status != PlanningStatus.CANCELLED)
+    ) or 0
+
+    urgent_planning_count = db.scalar(
+        select(func.count())
+        .select_from(Planning)
+        .where(Planning.priority == Priority.URGENT, Planning.status != PlanningStatus.CANCELLED)
+    ) or 0
+
+    monthly_intervention_trend_chart = monthly_intervention_trend_series(db, month_start, 12)
+    completion_trend_chart = monthly_completion_trend_series(db, month_start, 12)
+
+    # Whole-team workload, unlike the Chef/Admin dashboards' top-10 cap — an
+    # executive roll-up wants the full roster's distribution, not just the
+    # busiest handful, since a company this size (10 technicians) fits easily.
+    workload_rows = db.execute(
+        select(User.first_name, User.last_name, func.count(Intervention.id))
+        .join(Intervention, Intervention.technician_id == User.id)
+        .where(User.role.has(name=RoleName.TECHNICIAN))
+        .group_by(User.id)
+        .order_by(func.count(Intervention.id).desc())
+    ).all()
+    technician_workload_chart = [
+        ChartPoint(label=f"{first} {last[:1]}.", value=count) for first, last, count in workload_rows
+    ]
+
+    top_clients_rows = db.execute(
+        select(Client.client_name, func.count(Intervention.id))
+        .join(Intervention, Intervention.client_id == Client.id)
+        .group_by(Client.id)
+        .order_by(func.count(Intervention.id).desc())
+        .limit(10)
+    ).all()
+    top_clients_chart = [ChartPoint(label=name, value=count) for name, count in top_clients_rows]
+
+    # Contract/project-level rollups — cross-cutting metrics neither the Chef
+    # nor the Admin dashboard surfaces at all, since day-to-day approval work
+    # doesn't need to know which contract or project generated the volume.
+    contract_activity_rows = db.execute(
+        select(Contract.contract_name, func.count(Intervention.id))
+        .join(Intervention, Intervention.contract_id == Contract.id)
+        .group_by(Contract.id)
+        .order_by(func.count(Intervention.id).desc())
+        .limit(10)
+    ).all()
+    contract_activity_chart = [ChartPoint(label=name, value=count) for name, count in contract_activity_rows]
+
+    project_activity_rows = db.execute(
+        select(Project.project_name, func.count(Intervention.id))
+        .join(Intervention, Intervention.project_id == Project.id)
+        .group_by(Project.id)
+        .order_by(func.count(Intervention.id).desc())
+        .limit(10)
+    ).all()
+    project_activity_chart = [ChartPoint(label=name, value=count) for name, count in project_activity_rows]
+
+    # Priority lives on Planning, not Intervention (no priority column on the
+    # interventions table) — this is a scheduling-workload distribution, not
+    # a completed-work one.
+    priority_rows = db.execute(
+        select(Planning.priority, func.count(Planning.id))
+        .where(Planning.status != PlanningStatus.CANCELLED)
+        .group_by(Planning.priority)
+    ).all()
+    priority_counts = {priority.value: count for priority, count in priority_rows}
+    priority_distribution_chart = [
+        ChartPoint(label=p.value.capitalize(), value=priority_counts.get(p.value, 0)) for p in Priority
+    ]
+
+    return CeoDashboard(
+        total_interventions=total_interventions,
+        completed_interventions=completed_interventions,
+        pending_interventions=pending_interventions,
+        rejected_interventions=rejected_interventions,
+        approval_rate=approval_rate,
+        rejection_rate=rejection_rate,
+        average_intervention_duration_minutes=round(float(avg_duration), 1),
+        total_clients=total_clients,
+        active_clients=active_clients,
+        total_technicians=total_technicians,
+        active_technicians=active_technicians,
+        active_contracts=active_contracts,
+        contracts_expiring_soon=contracts_expiring_soon,
+        active_projects=active_projects,
+        upcoming_planned_interventions=upcoming_planned_interventions,
+        urgent_planning_count=urgent_planning_count,
+        monthly_intervention_trend_chart=monthly_intervention_trend_chart,
+        completion_trend_chart=completion_trend_chart,
+        technician_workload_chart=technician_workload_chart,
+        top_clients_chart=top_clients_chart,
+        contract_activity_chart=contract_activity_chart,
+        project_activity_chart=project_activity_chart,
+        priority_distribution_chart=priority_distribution_chart,
     )

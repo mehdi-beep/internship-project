@@ -26,7 +26,7 @@ def list_technical_pending(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("chef_technicien")),
+    _: User = Depends(require_roles("chef_technicien", "ceo")),
 ) -> ApiResponse[Page[InterventionOut]]:
     result = approval_service.list_technical_pending(db, page, page_size)
     return ApiResponse(
@@ -64,7 +64,7 @@ def technical_approval(
     intervention_id: int,
     payload: ApprovalDecisionInput,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("chef_technicien")),
+    current_user: User = Depends(require_roles("chef_technicien", "ceo")),
 ) -> ApiResponse[InterventionDetailOut]:
     intervention = approval_service.decide_technical_approval(db, intervention_id, payload, current_user.id)
     message = "Technical approval completed." if payload.decision.value == "approved" else "Intervention rejected."

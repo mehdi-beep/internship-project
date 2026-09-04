@@ -19,7 +19,7 @@ from app.services import export_service, report_service
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
-ROLES = ("chef_technicien", "admin_supervisor")
+ROLES = ("chef_technicien", "admin_supervisor", "ceo")
 
 
 @router.get("", response_model=ApiResponse[list[ReportTypeInfo]])

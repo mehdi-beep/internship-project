@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.role import RoleName
 
@@ -11,32 +11,50 @@ from app.models.role import RoleName
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
-def _validate_email_syntax(value: str) -> str:
+def _validate_email_syntax(value: str | None) -> str | None:
+    # Normalizes "" to None first: a blank string from an HTML form field
+    # left empty is not meaningfully different from omitting it, and storing
+    # "" (rather than NULL) would collide with a second Display account's
+    # equally-blank email under the column's unique constraint.
+    if not value:
+        return None
     if not _EMAIL_RE.match(value):
         raise ValueError("value is not a valid email address")
     return value
+
+
+def _require_email_unless_display(model: "UserCreate | UserUpdate") -> "UserCreate | UserUpdate":
+    # A Display account is a TV/kiosk login, not a real person — see
+    # app/models/role.py's RoleName.DISPLAY doc comment — so it has no reason
+    # to have an email address. Every other role still needs one, since
+    # that's how login-by-email and the password-reset flow identify a user.
+    if model.role != RoleName.DISPLAY and not model.email:
+        raise ValueError("email is required for this role")
+    return model
 
 
 class UserCreate(BaseModel):
     first_name: str
     last_name: str
     username: str
-    email: str
+    email: str | None = None
     phone: str | None = None
     role: RoleName
     password: str = Field(min_length=8)
 
     _validate_email = field_validator("email")(_validate_email_syntax)
+    _require_email = model_validator(mode="after")(_require_email_unless_display)
 
 
 class UserUpdate(BaseModel):
     first_name: str
     last_name: str
-    email: str
+    email: str | None = None
     phone: str | None = None
     role: RoleName
 
     _validate_email = field_validator("email")(_validate_email_syntax)
+    _require_email = model_validator(mode="after")(_require_email_unless_display)
 
 
 class PasswordReset(BaseModel):
@@ -58,7 +76,7 @@ class UserOut(BaseModel):
     first_name: str
     last_name: str
     username: str
-    email: str
+    email: str | None
     phone: str | None
     role: RoleName
     active: bool

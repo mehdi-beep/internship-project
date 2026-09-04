@@ -124,3 +124,43 @@ class AdminDashboardCharts(BaseModel):
     points_distribution_chart: list[ChartPoint]
     client_activity_chart: list[ChartPoint]
     city_activity_chart: list[ChartPoint]
+
+
+# --- CEO (Task 7) ---
+# Deliberately a single combined schema, not split scalar/*Charts like Admin's
+# Round-3 pair: the CEO view is a roll-up/trend surface with no per-period
+# drill-down selector, so there's no second "selected period" endpoint to
+# justify splitting chart data out of the main payload.
+
+
+class CeoDashboard(BaseModel):
+    # --- Company-wide funnel (all-time, not "this month" — a health snapshot) ---
+    total_interventions: int
+    completed_interventions: int
+    pending_interventions: int
+    rejected_interventions: int
+    approval_rate: float
+    rejection_rate: float
+    average_intervention_duration_minutes: float
+
+    # --- Organization scale ---
+    total_clients: int
+    active_clients: int
+    total_technicians: int
+    active_technicians: int
+    active_contracts: int
+    contracts_expiring_soon: int
+    active_projects: int
+
+    # --- Planning / cross-cutting workload ---
+    upcoming_planned_interventions: int
+    urgent_planning_count: int
+
+    # --- Trends and roll-ups ---
+    monthly_intervention_trend_chart: list[ChartPoint]
+    completion_trend_chart: list[ChartPoint]
+    technician_workload_chart: list[ChartPoint]
+    top_clients_chart: list[ChartPoint]
+    contract_activity_chart: list[ChartPoint]
+    project_activity_chart: list[ChartPoint]
+    priority_distribution_chart: list[ChartPoint]
