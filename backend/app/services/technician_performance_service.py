@@ -21,6 +21,25 @@ from app.services.dashboard_service import APPROVAL_PENDING_STATUSES, _month_sta
 # CEO and Display are deliberately excluded — see technician_performance.py.
 PERFORMANCE_SUPERVISOR_ROLES = (RoleName.CHEF_TECHNICIEN, RoleName.ADMIN_SUPERVISOR)
 
+# Task 9 follow-up — the tab is scoped by rank, not just "any supervisor sees
+# everyone": a Chef only sees the technicians they'd actually supervise, an
+# Admin (outranking Chef) also sees Chef rows, and only the CEO sees the
+# full roster including Admins. Deliberately a plain dict rather than a
+# generic "roles below me" computation, since the hierarchy has exactly
+# three viewer cases and a lookup table is the smallest thing that's
+# unambiguous about which case does what.
+_VISIBLE_ROLES_FOR_VIEWER: dict[RoleName, tuple[RoleName, ...]] = {
+    # A technician only ever reaches get_technician_performance_detail via the
+    # self-service /me route, which forces technician_id to their own id
+    # (see technician_performance.py) — never the list endpoint, which is
+    # supervisor-only. This entry exists only so that self-lookup passes the
+    # same scoping check as everyone else, rather than needing a bypass.
+    RoleName.TECHNICIAN: (RoleName.TECHNICIAN,),
+    RoleName.CHEF_TECHNICIEN: (RoleName.TECHNICIAN,),
+    RoleName.ADMIN_SUPERVISOR: (RoleName.TECHNICIAN, RoleName.CHEF_TECHNICIEN),
+    RoleName.CEO: (RoleName.TECHNICIAN, RoleName.CHEF_TECHNICIEN, RoleName.ADMIN_SUPERVISOR),
+}
+
 _APPROVAL_LEVEL_BY_ROLE = {
     RoleName.CHEF_TECHNICIEN: ApprovalLevel.TECHNICAL,
     RoleName.ADMIN_SUPERVISOR: ApprovalLevel.ADMINISTRATIVE,
@@ -159,9 +178,9 @@ def _summary_fields(db: Session, technician: User) -> dict:
     }
 
 
-def list_technician_performance(db: Session) -> list[TechnicianPerformanceSummary]:
+def list_technician_performance(db: Session, viewer_role: RoleName) -> list[TechnicianPerformanceSummary]:
     summaries = []
-    for role in (RoleName.TECHNICIAN, *PERFORMANCE_SUPERVISOR_ROLES):
+    for role in _VISIBLE_ROLES_FOR_VIEWER[viewer_role]:
         stmt = user_repository.list_query(role=role, active_only=True, search=None)
         people = db.scalars(stmt).all()
         if role == RoleName.TECHNICIAN:
@@ -209,9 +228,15 @@ def _monthly_weekly_approval_charts(
     return monthly_activity_chart, weekly_activity_chart
 
 
-def get_technician_performance_detail(db: Session, technician_id: int) -> TechnicianPerformanceDetail:
+def get_technician_performance_detail(
+    db: Session, technician_id: int, viewer_role: RoleName
+) -> TechnicianPerformanceDetail:
     person = user_repository.get(db, technician_id)
-    if person is None or person.role.name not in (RoleName.TECHNICIAN, *PERFORMANCE_SUPERVISOR_ROLES):
+    # 404, not 403, for the same reason the out-of-scope-role case already
+    # used 404 below: a Chef requesting an Admin's id by guessing a URL
+    # shouldn't be able to distinguish "that id doesn't exist" from "that id
+    # exists but you can't see it."
+    if person is None or person.role.name not in _VISIBLE_ROLES_FOR_VIEWER[viewer_role]:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found.")
 
     if person.role.name != RoleName.TECHNICIAN:

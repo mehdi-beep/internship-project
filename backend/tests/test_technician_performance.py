@@ -17,11 +17,53 @@ class TestRoleGating:
             response = client.get("/api/technician-performance", headers=auth_headers(username))
             assert response.status_code == 200
 
+    def test_chef_sees_only_technicians(self, client, auth_headers):
+        summaries = client.get("/api/technician-performance", headers=auth_headers("chef01")).json()["data"]
+        roles = {s["role"] for s in summaries}
+        assert roles == {"technician"}
+        assert len(summaries) == 10
+
+    def test_admin_sees_technicians_and_chefs_but_not_admins(self, client, auth_headers):
+        summaries = client.get("/api/technician-performance", headers=auth_headers("admin01")).json()["data"]
+        roles = {s["role"] for s in summaries}
+        assert roles == {"technician", "chef_technicien"}
+        assert len(summaries) == 12
+
+    def test_ceo_sees_everyone(self, client, auth_headers):
+        summaries = client.get("/api/technician-performance", headers=auth_headers("ceo01")).json()["data"]
+        roles = {s["role"] for s in summaries}
+        assert roles == {"technician", "chef_technicien", "admin_supervisor"}
+        assert len(summaries) == 14
+
+    def test_chef_gets_404_on_admin_detail(self, client, auth_headers):
+        admin_id = client.get("/api/auth/me", headers=auth_headers("admin01")).json()["data"]["id"]
+        response = client.get(f"/api/technician-performance/{admin_id}", headers=auth_headers("chef01"))
+        assert response.status_code == 404
+
+    def test_chef_gets_404_on_chef_detail(self, client, auth_headers):
+        # A Chef can't see even another Chef's row — the hierarchy is
+        # strictly "ranks below me," not "my own rank or below."
+        chef2_id = client.get("/api/auth/me", headers=auth_headers("chef02")).json()["data"]["id"]
+        response = client.get(f"/api/technician-performance/{chef2_id}", headers=auth_headers("chef01"))
+        assert response.status_code == 404
+
+    def test_admin_gets_404_on_admin_detail(self, client, auth_headers):
+        admin2_id = client.get("/api/auth/me", headers=auth_headers("admin02")).json()["data"]["id"]
+        response = client.get(f"/api/technician-performance/{admin2_id}", headers=auth_headers("admin01"))
+        assert response.status_code == 404
+
+    def test_admin_can_view_chef_detail(self, client, auth_headers):
+        chef_id = client.get("/api/auth/me", headers=auth_headers("chef01")).json()["data"]["id"]
+        response = client.get(f"/api/technician-performance/{chef_id}", headers=auth_headers("admin01"))
+        assert response.status_code == 200
+
 
 class TestSummaryList:
     def test_returns_all_active_technicians_with_expected_fields(self, client, auth_headers):
-        summaries = client.get("/api/technician-performance", headers=auth_headers("chef01")).json()["data"]
-        # seeded: 10 technicians + 2 chefs + 2 admins (ceo/display excluded)
+        # Viewer-scoped by rank (Task 9 follow-up): a Chef only sees
+        # Technician rows, so this uses ceo01 to exercise the full,
+        # unscoped roster (10 technicians + 2 chefs + 2 admins).
+        summaries = client.get("/api/technician-performance", headers=auth_headers("ceo01")).json()["data"]
         assert len(summaries) == 14
         technician_rows = [s for s in summaries if s["role"] == "technician"]
         assert len(technician_rows) == 10
@@ -55,7 +97,10 @@ class TestSummaryList:
             assert row["total_points"] == 0
 
     def test_admin_rows_have_approval_metrics_and_no_intervention_metrics(self, client, auth_headers):
-        summaries = client.get("/api/technician-performance", headers=auth_headers("chef01")).json()["data"]
+        # Admin rows are only visible to the CEO (Chef can't see them at all,
+        # Admin can't see themselves-as-a-peer in this hierarchy) — see the
+        # class-level test_returns_all_active_technicians_with_expected_fields.
+        summaries = client.get("/api/technician-performance", headers=auth_headers("ceo01")).json()["data"]
         admin_rows = [s for s in summaries if s["role"] == "admin_supervisor"]
         assert len(admin_rows) == 2
         for row in admin_rows:
@@ -107,8 +152,10 @@ class TestDetail:
         assert "email" in detail and "active" in detail
 
     def test_admin_id_returns_approval_detail(self, client, auth_headers):
+        # Only the CEO can view an Admin's detail row — see the viewer-scoping
+        # tests in TestRoleGating for the Chef-cannot-see-Admin case.
         admin_id = client.get("/api/auth/me", headers=auth_headers("admin01")).json()["data"]["id"]
-        detail = client.get(f"/api/technician-performance/{admin_id}", headers=auth_headers("chef01")).json()["data"]
+        detail = client.get(f"/api/technician-performance/{admin_id}", headers=auth_headers("ceo01")).json()["data"]
         assert detail["technician_id"] == admin_id
         assert detail["role"] == "admin_supervisor"
         assert detail["approvals_processed"] is not None

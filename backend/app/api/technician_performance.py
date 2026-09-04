@@ -16,9 +16,9 @@ SUPERVISOR_ROLES = ("chef_technicien", "admin_supervisor", "ceo")
 @router.get("", response_model=ApiResponse[list[TechnicianPerformanceSummary]])
 def list_technician_performance(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(*SUPERVISOR_ROLES)),
+    current_user: User = Depends(require_roles(*SUPERVISOR_ROLES)),
 ) -> ApiResponse[list[TechnicianPerformanceSummary]]:
-    return ApiResponse(data=technician_performance_service.list_technician_performance(db))
+    return ApiResponse(data=technician_performance_service.list_technician_performance(db, current_user.role.name))
 
 
 @router.get("/me", response_model=ApiResponse[TechnicianPerformanceDetail])
@@ -29,14 +29,22 @@ def get_my_technician_performance(
     # Self-service profile data — always forces technician_id to the caller's
     # own id, never accepting a client-supplied id, so this is structurally
     # safe to expose to the technician role (unlike GET /{technician_id}
-    # below, which is chef/admin only).
-    return ApiResponse(data=technician_performance_service.get_technician_performance_detail(db, current_user.id))
+    # below, which is chef/admin/ceo only).
+    return ApiResponse(
+        data=technician_performance_service.get_technician_performance_detail(
+            db, current_user.id, current_user.role.name
+        )
+    )
 
 
 @router.get("/{technician_id}", response_model=ApiResponse[TechnicianPerformanceDetail])
 def get_technician_performance(
     technician_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(*SUPERVISOR_ROLES)),
+    current_user: User = Depends(require_roles(*SUPERVISOR_ROLES)),
 ) -> ApiResponse[TechnicianPerformanceDetail]:
-    return ApiResponse(data=technician_performance_service.get_technician_performance_detail(db, technician_id))
+    return ApiResponse(
+        data=technician_performance_service.get_technician_performance_detail(
+            db, technician_id, current_user.role.name
+        )
+    )
