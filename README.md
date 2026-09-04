@@ -2,7 +2,7 @@
 
 Digital replacement for the company's paper-based intervention workflow.
 
-**Status:** Phases 1–10 complete (Init, Database, Auth, Reference Data, Planning, Interventions, Business Logic, Approvals, Dashboards & Reporting, Testing & Cleanup), plus eight post-launch tasks: configurable search/filters (Task 1), Administrator-configurable point rules (Task 2), a read-only hallway-display role with a live-updating global calendar (Task 3), assigned-intervention notifications with optional email/WhatsApp channels (Task 4), deactivation and permanent deletion for reference-data entities (Task 5), permanent deletion for Users with full history preservation (Task 6), a CEO role with exclusive Admin-management power (Task 7), and login by username-or-email plus self-service password reset (Task 8). See "Post-Launch Tasks" below for what each one actually changed.
+**Status:** Phases 1–10 complete (Init, Database, Auth, Reference Data, Planning, Interventions, Business Logic, Approvals, Dashboards & Reporting, Testing & Cleanup), plus nine post-launch tasks: configurable search/filters (Task 1), Administrator-configurable point rules (Task 2), a read-only hallway-display role with a live-updating global calendar (Task 3), assigned-intervention notifications with optional email/WhatsApp channels (Task 4), deactivation and permanent deletion for reference-data entities (Task 5), permanent deletion for Users with full history preservation (Task 6), a CEO role with exclusive Admin-management power (Task 7), login by username-or-email plus self-service password reset (Task 8), and a deployment hardening pass (Task 9) that closed several role-authorization gaps found only once the app was running against real PostgreSQL, fixed a class of calendar-remount bugs, and expanded technician performance tracking to Chef/Admin accounts. See "Post-Launch Tasks" below for what each one actually changed.
 
 > Several reference documents (the original SRS, phased task breakdown, full data model, API contracts, notification setup, and Postgres-migration notes) live in a local-only `additions/` folder that is intentionally not part of this repository on GitHub — see "Project Documentation" below for what's still available and where.
 
@@ -21,7 +21,7 @@ internship-project/
 ├── backend/
 │   ├── app/
 │   │   ├── api/            # FastAPI routers — HTTP only, no business logic
-│   │   ├── models/         # SQLAlchemy ORM models (16 tables)
+│   │   ├── models/         # SQLAlchemy ORM models (17 tables)
 │   │   ├── schemas/        # Pydantic request/response schemas
 │   │   ├── services/       # business logic (the only place calculations happen)
 │   │   ├── repositories/   # database query layer
@@ -31,8 +31,8 @@ internship-project/
 │   │   ├── utils/
 │   │   ├── uploads/        # uploaded attachments (gitignored)
 │   │   └── static/
-│   ├── alembic/versions/    # migrations (8, single linear chain)
-│   ├── tests/               # pytest suite (259 tests, see "Running Tests" below)
+│   ├── alembic/versions/    # migrations (11, single linear chain)
+│   ├── tests/               # pytest suite (267 tests, see "Running Tests" below)
 │   ├── main.py
 │   ├── config.py
 │   ├── dev.db               # pre-seeded SQLite database (see "Quick Start")
@@ -128,7 +128,7 @@ python -m venv venv
 ./venv/Scripts/activate      # Windows
 pip install -r requirements.txt
 cp .env.example .env         # adjust if needed
-alembic upgrade head          # applies the full schema (16 tables, 8-migration chain)
+alembic upgrade head          # applies the full schema (17 tables, 11-migration chain)
 uvicorn main:app --reload
 ```
 
@@ -161,7 +161,7 @@ cd backend
 python -m app.database.seed
 ```
 
-This populates the database with realistic synthetic data simulating several months of company activity: 10 technicians, 2 Chef des Techniciens, 2 Administration Supervisors, 1 read-only Display account (Task 3), 1 CEO account (Task 7), 20+ clients, 50+ client sites, 25+ contracts, 15+ projects, 125 travaux catalog entries, 500+ interventions across every lifecycle status (including warranty interventions referencing real prior BI numbers), 200+ planning records, 300+ notifications, 3 default point rules (Task 2 — see below), and full approval/audit history.
+This populates the database with realistic synthetic data simulating several months of company activity: 10 technicians, 2 Chef des Techniciens, 2 Administration Supervisors, 1 read-only Display account (Task 3), 1 CEO account (Task 7), 20+ clients, 50+ client sites, 25+ contracts, 15+ projects, 183 travaux catalog entries (58 real company codes in `TRAVAUX_CATALOG`, seeded verbatim from the client's own reference spreadsheet, plus 125 legacy generic entries in a separate `LEGACY_PLACEHOLDER_TRAVAUX_CATALOG` kept intentionally distinct rather than merged in — see the comment on that list in `seed.py`), 500+ interventions across every lifecycle status (including warranty interventions referencing real prior BI numbers), 200+ planning records, 300+ notifications, 3 default point rules (Task 2 — see below), and full approval/audit history.
 
 The script is idempotent — re-running it against an already-seeded database is a no-op (it checks whether the `roles` table is empty first).
 
@@ -174,7 +174,7 @@ The script is idempotent — re-running it against an already-seeded database is
 
 Every seeded account can also log in with its email instead of its username (Task 8) — e.g. `ceo01@bims.local` works wherever `ceo01` does.
 
-> The committed `backend/dev.db` file additionally contains 58 real company travaux (technical-operation codes/names, added directly through the Travaux admin screen rather than the seed script) on top of the 125 synthetic ones above, for a live total of 183. Running `python -m app.database.seed` against a *fresh* empty database reproduces only the 125 synthetic entries — the 58 real ones are specific to the already-seeded `dev.db` file shipped in this repo, not something the seed script itself generates.
+> Earlier revisions of this project only had a 125-entry generic placeholder travaux catalog in the seed script itself, with the 58 real company codes added by hand directly through the Travaux admin screen on top of it — meaning a fresh `python -m app.database.seed` run reproduced only the placeholder 125. As of Task 9, both catalogs live directly in `seed.py` (`TRAVAUX_CATALOG` for the 58 real codes, `LEGACY_PLACEHOLDER_TRAVAUX_CATALOG` for the 125 legacy ones), so a fresh seed now reproduces the full 183 without any manual step.
 
 ## Running Everything via Docker Compose
 
@@ -186,7 +186,7 @@ Starts Postgres, backend (with hot reload), and frontend (with hot reload) toget
 
 ## Running Tests
 
-The backend has a permanent pytest suite (259 tests) covering authentication (including login by username or email, and self-service password reset — Task 8), business logic (duration/point calculation, status transitions), planning, interventions, approvals, reference-data CRUD, dashboards, reports, technician performance, configurable point rules (Task 2), the read-only display role (Task 3), assignment notifications (Task 4), deactivation/permanent deletion (Task 5 and Task 6), and the CEO role's exclusive Admin-management power (Task 7):
+The backend has a permanent pytest suite (267 tests) covering authentication (including login by username or email, and self-service password reset — Task 8), business logic (duration/point calculation, status transitions), planning, interventions, approvals, reference-data CRUD, dashboards (including the CEO's own dashboard — Task 9), reports, employees performance (technician/Chef/Admin — Task 9), configurable point rules (Task 2), the read-only display role (Task 3), assignment notifications (Task 4), deactivation/permanent deletion (Task 5 and Task 6), the CEO role's exclusive Admin-management power (Task 7), and the role-authorization/calendar fixes from Task 9:
 
 ```bash
 cd backend
@@ -290,6 +290,31 @@ A 5th role, `ceo`, sits above Administration Supervisor: **exactly one CEO accou
 Alongside that, any authenticated user can now reset their own password without an Administrator: `GET /auth/password-reset/availability`, `POST /auth/password-reset/request`, and `POST /auth/password-reset/confirm` (all in `backend/app/services/password_reset_service.py` and `backend/app/api/auth.py`) implement a two-step, code-based flow that always acts on the caller's own account, never a target user id. Requesting a reset emails a 6-digit code (bcrypt-hashed at rest, never stored raw, 10-minute expiry, single-use) to the user's on-file address via the existing Task 4 `delivery_service` — no second email system. If email isn't configured, the request fails loudly with a 409 rather than pretending to succeed, since a silent failure here would leave someone locked out with no explanation.
 
 - Migration: `backend/alembic/versions/a2159ec5c6ae_add_password_reset_codes.py`
+
+### Task 9 — Deployment Hardening: CEO Authorization Gaps, Calendar Remount Bugs, Employees Performance
+
+Deploying against a real PostgreSQL server for the first time (rather than the SQLite database every automated test and prior manual check ran against) surfaced several bugs that had been invisible until then, alongside a round of feature fixes requested once the app was actually being used day-to-day.
+
+**CEO authorization gaps.** Four separate places had a local role-checking helper or tuple that predated the CEO role (Task 7) and was never updated to include it, despite the route itself already accepting `ceo` — so a CEO account calling these routes was either silently scoped down to zero results or hit an outright 403:
+
+- `app/api/interventions.py` and `app/api/attachments.py`'s `_is_privileged()` helpers excluded `ceo`, so `list_interventions` fell into the "must be your own assigned intervention" branch — a CEO is never assigned as a technician, so the Interventions page rendered completely empty.
+- `app/api/reports.py`'s `ROLES` tuple and `app/api/technician_performance.py`'s `SUPERVISOR_ROLES` tuple were the actual route-level authorization, not just an internal helper — both 403'd a CEO account entirely.
+
+All four now include `ceo`. Two Chef-only approval routes (`list_technical_pending`, `technical_approval` in `app/api/approvals.py`) were also widened to accept `ceo`, alongside the two administrative-approval routes that already did — the CEO can now perform both approval types, while Chef keeps sole ownership of Technical and Admin keeps sole ownership of Administrative. The existing "notify Admins when an intervention reaches administrative approval" workflow notification (`notification_service.notify_admins_of_technical_approval`) now also reaches the CEO, since that's the one approval-workflow moment genuinely relevant to their new approval power — no other notification type was widened.
+
+**A dedicated CEO dashboard** (`GET /api/dashboard/ceo`, `CeoDashboardContent.tsx`) replaced the previous behavior of simply rendering the Admin dashboard for CEO accounts too. It's deliberately framed around company-wide, longer-horizon metrics an Admin's more operational dashboard doesn't show — all-time approval/rejection rates and intervention funnel counts (vs. Admin's monthly scoping), contract/project activity and contracts-expiring-soon (Admin's dashboard never joins through `contract_id`/`project_id` at all), whole-team technician workload distribution rather than a busiest-few list, and a 12-month trend window instead of 6.
+
+**Calendar remount bugs.** `MyInterventionsPage.tsx`'s and `PlanningPage.tsx`'s calendar views both conditionally rendered either the calendar component or a plain "No results found" message based on whether the current result set was empty — including transiently empty, during the moment a TanStack Query key changes and its data resets before the new fetch resolves. Since the message and the calendar are different element types, React unmounted the entire FullCalendar instance underneath on every such transition, destroying its own internally-tracked current date. This was the actual cause of three distinct-looking symptoms that were all one bug: the Chef intervention calendar flashing "No interventions found" on every month navigation, month navigation occasionally jumping back to today instead of continuing further, and newly-created planning entries not visually appearing on the calendar after a save despite the underlying query correctly refetching. Fixed by keeping the calendar component always mounted once loaded (an empty events array renders as a normal empty grid, which needs no separate message) and adding `placeholderData: keepPreviousData` to the interventions calendar query specifically, so a query-key change no longer produces a transient empty state at all.
+
+**Reports date-window visibility.** `report_service.generate_intervention_report` has always defaulted date-scoped report types to a trailing window (30 days for "monthly," etc.) when no explicit date range is given — by design, so a fresh "Daily Report" click shows something sensible rather than requiring filters first. The backend already returned the actual resolved `date_from`/`date_to` on every response, but the frontend never displayed it, so a report scoped to the last 30 days looked identical to one showing everything, with no visible indication a filter was active. `ReportsPage.tsx` now shows the real effective range whenever the user hasn't set explicit dates.
+
+**Display accounts no longer require an email or phone number.** A Display account is a shared kiosk login, not a real person, so requiring contact details for one never made sense. `users.email` is now a nullable column (previously `NOT NULL`); a Pydantic model validator (`app/schemas/user.py`) still requires email for every other role, and the Users admin form only relaxes the requirement when the selected role is Display.
+
+**Priority colors.** Planning's High priority previously rendered identically to Normal (both blue) on the calendar, since the shared color function only had an explicit override for Urgent. High now overlays as amber/orange while the entry is active (planned/in_progress) — the same overlay pattern Urgent already used — without changing a completed or cancelled entry's status color regardless of priority, so "green means done" still holds at every priority level.
+
+**Employees Performance** (renamed from "Technician Performance," same tab) now includes Chef and Admin accounts alongside technicians, each with role-appropriate metrics rather than reusing the technician metric set verbatim (which would have shown all zeros for Chef/Admin, since neither is ever assigned as an intervention's technician): Chef rows show technical approvals processed/rejected and average turnaround time; Admin rows show the same shape for administrative approvals. Technician rows and their existing metrics are unchanged. CEO and Display accounts remain excluded from this list.
+
+- Migration: `backend/alembic/versions/937af91e0f57_make_user_email_nullable.py`
 
 ## Project Documentation
 
