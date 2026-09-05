@@ -45,23 +45,34 @@ interface FormValues {
   notes: string;
 }
 
+// Matches DisplayCalendarPage.tsx's own live-refresh interval exactly, so
+// both calendars feel identically responsive to a new/edited/cancelled
+// planning entry regardless of which role's screen is open.
+const POLL_INTERVAL_MS = 20_000;
+
 export default function PlanningPage() {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const highlightId = searchParams.get("highlight");
-  const [monthRange] = useState(() => ({
-    date_from: dayjs().startOf("month").subtract(1, "month").format("YYYY-MM-DD"),
-    date_to: dayjs().endOf("month").add(1, "month").format("YYYY-MM-DD"),
-  }));
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Planning | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Planning | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [cancelErrorMessage, setCancelErrorMessage] = useState<string | null>(null);
 
+  // Unbounded date range and a raised page_size — the same choice
+  // DisplayCalendarPage.tsx makes deliberately (see that file's own comment
+  // on displayRange()): a fixed 1-month-before/1-month-after window meant a
+  // planning entry created outside it could never appear here at all,
+  // regardless of any refresh. 500 comfortably covers the current live count
+  // (222 as of this change) with headroom; if the company's total active
+  // planning history grows well past that, this is the first place to
+  // revisit, same caveat Display's own comment already calls out.
   const { data: planningPage, isLoading, isError } = useQuery({
-    queryKey: ["planning", "calendar", monthRange],
-    queryFn: () => listPlanning({ ...monthRange, page_size: 200 }),
+    queryKey: ["planning", "calendar"],
+    queryFn: () => listPlanning({ page_size: 500 }),
+    refetchInterval: POLL_INTERVAL_MS,
+    refetchIntervalInBackground: true,
   });
 
   const { data: techniciansPage } = useQuery({

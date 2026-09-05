@@ -65,15 +65,21 @@ export default function PermanentDeleteDialog({
     if (open) setTyped("");
   }, [open, entityName]);
 
-  // No entity is hard-blocked from permanent deletion any more — every
-  // reference is detached (never destroyed), and for a User specifically
-  // their name is frozen onto each referencing row before the link is
-  // cleared. `blockers` here is purely informational: what will lose its
-  // link to this record, always alongside the confirm flow below, never in
-  // place of it.
+  // No entity TYPE is hard-blocked from permanent deletion — every reference
+  // is detached (never destroyed), and for a User specifically their name is
+  // frozen onto each referencing row before the link is cleared — so
+  // `blockers` here is purely informational for the general case: what will
+  // lose its link to this record, alongside the confirm flow, never in place
+  // of it. The one exception is a single specific ROW, not a type: the CEO
+  // account (deletion_service.ensure_deletable's hard block). The backend
+  // already reports that via `check.deletable`, which this previously never
+  // read — meaning the button would visually arm and only fail on the
+  // backend's own 409 at the last possible click, with no warning anywhere
+  // in the dialog itself.
   const impacts = check?.blockers ?? [];
   const nameMatches = typed.trim() === entityName.trim();
-  const canDelete = !checkLoading && nameMatches && !loading;
+  const hardBlocked = check?.deletable === false;
+  const canDelete = !checkLoading && !hardBlocked && nameMatches && !loading;
 
   return (
     <Dialog open={open} onClose={loading ? undefined : onCancel} maxWidth="sm" fullWidth>
@@ -110,7 +116,14 @@ export default function PermanentDeleteDialog({
             </Alert>
           )}
 
-          {!checkLoading && (
+          {!checkLoading && hardBlocked && (
+            <Alert severity="error">
+              <AlertTitle>This account cannot be deleted</AlertTitle>
+              This is the sole CEO account. It is protected from permanent deletion, including by itself.
+            </Alert>
+          )}
+
+          {!checkLoading && !hardBlocked && (
             <>
               <Alert severity="warning" icon={<WarningAmberIcon />}>
                 <AlertTitle>This cannot be undone</AlertTitle>

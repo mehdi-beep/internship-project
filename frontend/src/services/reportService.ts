@@ -52,7 +52,14 @@ export async function downloadExport(
   params: Record<string, unknown>,
   filename: string,
 ): Promise<void> {
-  const { data } = await apiClient.get(`/reports/export.${format}`, { params, responseType: "blob" });
+  // Overrides apiClient's default 15s timeout (see api/client.ts) — PDF/Excel
+  // generation over a large dataset can legitimately take longer than a
+  // normal JSON fetch.
+  const { data } = await apiClient.get(`/reports/export.${format}`, {
+    params,
+    responseType: "blob",
+    timeout: 60_000,
+  });
   const url = URL.createObjectURL(data as Blob);
   const link = document.createElement("a");
   link.href = url;

@@ -25,6 +25,7 @@ import SearchBar from "../../components/SearchBar";
 import Modal from "../../components/Modal";
 import ConfirmationDialog from "../../components/ConfirmationDialog";
 import PermanentDeleteDialog from "../../components/PermanentDeleteDialog";
+import CeoSelfDeleteDialog from "../../components/CeoSelfDeleteDialog";
 import { usePermanentDelete } from "../../hooks/usePermanentDelete";
 import {
   checkUserDeletable,
@@ -234,6 +235,21 @@ export default function UsersPage() {
     getId: (u) => u.id,
   });
 
+  // A CEO viewing their own row: routed to a dedicated 3-step explanatory
+  // dialog instead of the shared PermanentDeleteDialog above. The backend
+  // hard-blocks this unconditionally either way (deletion_service.
+  // ensure_deletable) — this exists purely so a CEO attempting to delete
+  // their own account sees why, in stages, rather than the generic dialog's
+  // single "type the name" flow.
+  const [ceoSelfDeleteOpen, setCeoSelfDeleteOpen] = useState(false);
+  const startDelete = (u: AppUser) => {
+    if (u.role === "ceo" && u.id === currentUser?.id) {
+      setCeoSelfDeleteOpen(true);
+    } else {
+      permanentDelete.start(u);
+    }
+  };
+
   // Task 7 — an Admin viewing the CEO's or another Admin's row: per explicit
   // instruction, Name/Username/Role stay visible (so the row is still
   // identifiable) but Email/Status/every action button show a plain
@@ -292,7 +308,7 @@ export default function UsersPage() {
               </IconButton>
             </Tooltip>
             <Tooltip title="Delete permanently">
-              <IconButton size="small" color="error" onClick={() => permanentDelete.start(u)}>
+              <IconButton size="small" color="error" onClick={() => startDelete(u)}>
                 <DeleteForeverIcon fontSize="small" />
               </IconButton>
             </Tooltip>
@@ -500,6 +516,12 @@ export default function UsersPage() {
         errorMessage={permanentDelete.errorMessage}
         onConfirm={permanentDelete.confirm}
         onCancel={permanentDelete.cancel}
+      />
+
+      <CeoSelfDeleteDialog
+        open={ceoSelfDeleteOpen}
+        username={currentUser?.username ?? ""}
+        onCancel={() => setCeoSelfDeleteOpen(false)}
       />
     </Box>
   );
