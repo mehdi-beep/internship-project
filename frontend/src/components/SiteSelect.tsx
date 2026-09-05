@@ -27,7 +27,7 @@ export default function SiteSelect({ clientId, ...props }: SiteSelectProps) {
   // hang on a flaky connection with no visible feedback at all.
   if (isError) {
     return (
-      <Stack direction="row" spacing={1} alignItems="center">
+      <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
         <TextField select label="Site" fullWidth disabled {...props} value="" />
         <Button size="small" onClick={() => refetch()} disabled={isFetching}>
           {isFetching ? "Retrying…" : "Retry"}
