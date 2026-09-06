@@ -19,6 +19,7 @@ from app.schemas.dashboard import (
     AdminDashboard,
     AdminDashboardCharts,
     CeoDashboard,
+    CeoDashboardCharts,
     ChartPoint,
     ChefDashboard,
     ChefDashboardCharts,
@@ -28,7 +29,7 @@ from app.schemas.dashboard import (
     TechnicianDashboardCharts,
 )
 
-PeriodMode = Literal["daily", "weekly", "monthly"]
+PeriodMode = Literal["daily", "weekly", "monthly", "yearly"]
 
 APPROVAL_PENDING_STATUSES = (
     InterventionStatus.SUBMITTED,
@@ -244,6 +245,9 @@ def _period_bounds(mode: PeriodMode, anchor: date) -> tuple[date, date]:
     if mode == "monthly":
         start = anchor.replace(day=1)
         return start, _shift_month(start, 1)
+    if mode == "yearly":
+        start = anchor.replace(month=1, day=1)
+        return start, start.replace(year=start.year + 1)
     raise ValueError(f"Unknown period mode: {mode!r}")
 
 
@@ -268,6 +272,23 @@ def _daily_breakdown(db: Session, mode: PeriodMode, anchor: date, count_for_day)
     return points
 
 
+def _monthly_breakdown(db: Session, anchor: date, count_for_month) -> list[ChartPoint]:
+    """Yearly-mode counterpart to _daily_breakdown: a year shown day-by-day
+    would be 365 unreadable points, so yearly buckets by month instead — 12
+    ChartPoints, one per calendar month of the selected year. `count_for_month`
+    takes the [month_start, month_end) bounds (not a single day, since a whole
+    month can't be matched with the `==` a single day allows) and returns that
+    month's value."""
+    start, _ = _period_bounds("yearly", anchor)
+    points = []
+    month_start = start
+    for _ in range(12):
+        month_end = _shift_month(month_start, 1)
+        points.append(ChartPoint(label=month_start.strftime("%b"), value=count_for_month(month_start, month_end)))
+        month_start = month_end
+    return points
+
+
 def technician_completed_series(db: Session, technician_id: int, mode: PeriodMode, anchor: date) -> list[ChartPoint]:
     def count_for_day(day: date) -> int:
         return db.scalar(
@@ -279,6 +300,21 @@ def technician_completed_series(db: Session, technician_id: int, mode: PeriodMod
                 Intervention.status == InterventionStatus.FULLY_APPROVED,
             )
         ) or 0
+
+    if mode == "yearly":
+        def count_for_month(month_start: date, month_end: date) -> int:
+            return db.scalar(
+                select(func.count())
+                .select_from(Intervention)
+                .where(
+                    Intervention.technician_id == technician_id,
+                    Intervention.intervention_date >= month_start,
+                    Intervention.intervention_date < month_end,
+                    Intervention.status == InterventionStatus.FULLY_APPROVED,
+                )
+            ) or 0
+
+        return _monthly_breakdown(db, anchor, count_for_month)
 
     return _daily_breakdown(db, mode, anchor, count_for_day)
 
@@ -294,6 +330,18 @@ def technician_points_series(db: Session, technician_id: int, mode: PeriodMode, 
             )
         ) or 0
 
+    if mode == "yearly":
+        def points_for_month(month_start: date, month_end: date) -> int:
+            return db.scalar(
+                select(func.coalesce(func.sum(Intervention.points_earned), 0)).where(
+                    Intervention.technician_id == technician_id,
+                    Intervention.submission_date >= month_start,
+                    Intervention.submission_date < month_end,
+                )
+            ) or 0
+
+        return _monthly_breakdown(db, anchor, points_for_month)
+
     return _daily_breakdown(db, mode, anchor, points_for_day)
 
 
@@ -306,6 +354,16 @@ def activity_series(db: Session, mode: PeriodMode, anchor: date) -> list[ChartPo
         return db.scalar(
             select(func.count()).select_from(Intervention).where(Intervention.intervention_date == day)
         ) or 0
+
+    if mode == "yearly":
+        def count_for_month(month_start: date, month_end: date) -> int:
+            return db.scalar(
+                select(func.count())
+                .select_from(Intervention)
+                .where(Intervention.intervention_date >= month_start, Intervention.intervention_date < month_end)
+            ) or 0
+
+        return _monthly_breakdown(db, anchor, count_for_month)
 
     return _daily_breakdown(db, mode, anchor, count_for_day)
 
@@ -948,4 +1006,164 @@ def get_ceo_dashboard(db: Session) -> CeoDashboard:
         contract_activity_chart=contract_activity_chart,
         project_activity_chart=project_activity_chart,
         priority_distribution_chart=priority_distribution_chart,
+    )
+
+
+# ---------------------------------------------------------------------------
+# CEO dashboard — mode-aware "single selected period" chart bundle (Round 3
+# extension). get_ceo_dashboard above stays all-time/fixed-12-month for
+# backward compatibility (per its own docstring-equivalent comment); this is
+# the separate Day/Week/Month/Year-scoped version of the same 7 concepts,
+# populating CeoDashboardCharts, served by GET /ceo/charts.
+# ---------------------------------------------------------------------------
+
+
+def ceo_interventions_series(db: Session, mode: PeriodMode, anchor: date) -> list[ChartPoint]:
+    """Mode-aware counterpart to monthly_intervention_trend_series — same
+    metric (all interventions by intervention_date, no status filter), same
+    counting logic, just windowed by the selected period instead of a fixed
+    trailing 12 months."""
+
+    def count_for_day(day: date) -> int:
+        return db.scalar(
+            select(func.count()).select_from(Intervention).where(Intervention.intervention_date == day)
+        ) or 0
+
+    if mode == "yearly":
+        def count_for_month(month_start: date, month_end: date) -> int:
+            return db.scalar(
+                select(func.count())
+                .select_from(Intervention)
+                .where(Intervention.intervention_date >= month_start, Intervention.intervention_date < month_end)
+            ) or 0
+
+        return _monthly_breakdown(db, anchor, count_for_month)
+
+    return _daily_breakdown(db, mode, anchor, count_for_day)
+
+
+def ceo_completion_series(db: Session, mode: PeriodMode, anchor: date) -> list[ChartPoint]:
+    """Mode-aware counterpart to monthly_completion_trend_series — same
+    FULLY_APPROVED-by-intervention_date metric, windowed by the selected
+    period instead of a fixed trailing 12 months."""
+
+    def count_for_day(day: date) -> int:
+        return db.scalar(
+            select(func.count())
+            .select_from(Intervention)
+            .where(Intervention.intervention_date == day, Intervention.status == InterventionStatus.FULLY_APPROVED)
+        ) or 0
+
+    if mode == "yearly":
+        def count_for_month(month_start: date, month_end: date) -> int:
+            return db.scalar(
+                select(func.count())
+                .select_from(Intervention)
+                .where(
+                    Intervention.intervention_date >= month_start,
+                    Intervention.intervention_date < month_end,
+                    Intervention.status == InterventionStatus.FULLY_APPROVED,
+                )
+            ) or 0
+
+        return _monthly_breakdown(db, anchor, count_for_month)
+
+    return _daily_breakdown(db, mode, anchor, count_for_day)
+
+
+def ceo_technician_workload_series(db: Session, mode: PeriodMode, anchor: date) -> list[ChartPoint]:
+    """Mode-aware counterpart to get_ceo_dashboard's technician_workload_chart
+    — same whole-roster query (no top-10 cap, unlike Chef/Admin's technician_
+    workload_series), windowed to the selected period on Intervention.
+    intervention_date instead of all-time."""
+    start, end = _period_bounds(mode, anchor)
+    rows = db.execute(
+        select(User.first_name, User.last_name, func.count(Intervention.id))
+        .join(Intervention, Intervention.technician_id == User.id)
+        .where(
+            User.role.has(name=RoleName.TECHNICIAN),
+            Intervention.intervention_date >= start,
+            Intervention.intervention_date < end,
+        )
+        .group_by(User.id)
+        .order_by(func.count(Intervention.id).desc())
+    ).all()
+    return [ChartPoint(label=f"{first} {last[:1]}.", value=count) for first, last, count in rows]
+
+
+def ceo_top_clients_series(db: Session, mode: PeriodMode, anchor: date) -> list[ChartPoint]:
+    """Mode-aware counterpart to get_ceo_dashboard's top_clients_chart, windowed
+    to the selected period on Intervention.intervention_date instead of all-time."""
+    start, end = _period_bounds(mode, anchor)
+    rows = db.execute(
+        select(Client.client_name, func.count(Intervention.id))
+        .join(Intervention, Intervention.client_id == Client.id)
+        .where(Intervention.intervention_date >= start, Intervention.intervention_date < end)
+        .group_by(Client.id)
+        .order_by(func.count(Intervention.id).desc())
+        .limit(10)
+    ).all()
+    return [ChartPoint(label=name, value=count) for name, count in rows]
+
+
+def ceo_contract_activity_series(db: Session, mode: PeriodMode, anchor: date) -> list[ChartPoint]:
+    """Mode-aware counterpart to get_ceo_dashboard's contract_activity_chart,
+    windowed to the selected period on Intervention.intervention_date instead
+    of all-time."""
+    start, end = _period_bounds(mode, anchor)
+    rows = db.execute(
+        select(Contract.contract_name, func.count(Intervention.id))
+        .join(Intervention, Intervention.contract_id == Contract.id)
+        .where(Intervention.intervention_date >= start, Intervention.intervention_date < end)
+        .group_by(Contract.id)
+        .order_by(func.count(Intervention.id).desc())
+        .limit(10)
+    ).all()
+    return [ChartPoint(label=name, value=count) for name, count in rows]
+
+
+def ceo_project_activity_series(db: Session, mode: PeriodMode, anchor: date) -> list[ChartPoint]:
+    """Mode-aware counterpart to get_ceo_dashboard's project_activity_chart,
+    windowed to the selected period on Intervention.intervention_date instead
+    of all-time."""
+    start, end = _period_bounds(mode, anchor)
+    rows = db.execute(
+        select(Project.project_name, func.count(Intervention.id))
+        .join(Intervention, Intervention.project_id == Project.id)
+        .where(Intervention.intervention_date >= start, Intervention.intervention_date < end)
+        .group_by(Project.id)
+        .order_by(func.count(Intervention.id).desc())
+        .limit(10)
+    ).all()
+    return [ChartPoint(label=name, value=count) for name, count in rows]
+
+
+def ceo_priority_distribution_series(db: Session, mode: PeriodMode, anchor: date) -> list[ChartPoint]:
+    """Mode-aware counterpart to get_ceo_dashboard's priority_distribution_chart
+    — priority lives on Planning, not Intervention (same reasoning as the
+    all-time version), so this windows on Planning.planned_date rather than
+    Intervention.intervention_date like the other 6 charts here."""
+    start, end = _period_bounds(mode, anchor)
+    rows = db.execute(
+        select(Planning.priority, func.count(Planning.id))
+        .where(
+            Planning.status != PlanningStatus.CANCELLED,
+            Planning.planned_date >= start,
+            Planning.planned_date < end,
+        )
+        .group_by(Planning.priority)
+    ).all()
+    priority_counts = {priority.value: count for priority, count in rows}
+    return [ChartPoint(label=p.value.capitalize(), value=priority_counts.get(p.value, 0)) for p in Priority]
+
+
+def get_ceo_dashboard_charts(db: Session, mode: PeriodMode, anchor: date) -> CeoDashboardCharts:
+    return CeoDashboardCharts(
+        interventions_chart=ceo_interventions_series(db, mode, anchor),
+        completion_chart=ceo_completion_series(db, mode, anchor),
+        technician_workload_chart=ceo_technician_workload_series(db, mode, anchor),
+        top_clients_chart=ceo_top_clients_series(db, mode, anchor),
+        contract_activity_chart=ceo_contract_activity_series(db, mode, anchor),
+        project_activity_chart=ceo_project_activity_series(db, mode, anchor),
+        priority_distribution_chart=ceo_priority_distribution_series(db, mode, anchor),
     )

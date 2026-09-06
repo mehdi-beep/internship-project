@@ -80,6 +80,7 @@ class UserOut(BaseModel):
     phone: str | None
     role: RoleName
     active: bool
+    dnd_enabled: bool
     created_at: datetime
     updated_at: datetime
 
@@ -94,6 +95,7 @@ class UserOut(BaseModel):
             phone=user.phone,
             role=user.role.name,
             active=user.active,
+            dnd_enabled=user.dnd_enabled,
             created_at=user.created_at,
             updated_at=user.updated_at,
         )

@@ -56,6 +56,13 @@ def set_active(db: Session, user: User, active: bool) -> User:
     return user
 
 
+def set_dnd(db: Session, user: User, dnd_enabled: bool) -> User:
+    user.dnd_enabled = dnd_enabled
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def set_password(db: Session, user: User, password_hash: str) -> User:
     user.password_hash = password_hash
     db.commit()

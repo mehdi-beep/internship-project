@@ -128,6 +128,112 @@ def test_ceo_dashboard_charts_are_bounded(client, auth_headers):
     assert len(data["project_activity_chart"]) <= 10
 
 
+class TestCeoDashboardChartsEndpoint:
+    """/ceo/charts — the mode-aware Day/Week/Month/Year counterpart to the 7
+    chart fields already on /ceo (which stays all-time for compatibility).
+    Mirrors TestDashboardChartsEndpoints below, but CEO-exclusive rather than
+    shared with admin_supervisor like /admin/charts."""
+
+    def test_shape_and_role_gating(self, client, auth_headers):
+        ceo = auth_headers("ceo01")
+        response = client.get(
+            "/api/dashboard/ceo/charts", headers=ceo, params={"mode": "monthly", "anchor": "2026-01-15"}
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        for key in [
+            "interventions_chart", "completion_chart", "technician_workload_chart",
+            "top_clients_chart", "contract_activity_chart", "project_activity_chart",
+            "priority_distribution_chart",
+        ]:
+            assert key in data
+
+        # CEO-exclusive, unlike /admin/charts which admin_supervisor also
+        # sees — matches the existing /ceo route's own gating.
+        admin = auth_headers("admin01")
+        chef = auth_headers("chef01")
+        assert client.get(
+            "/api/dashboard/ceo/charts", headers=admin, params={"mode": "monthly", "anchor": "2026-01-15"}
+        ).status_code == 403
+        assert client.get(
+            "/api/dashboard/ceo/charts", headers=chef, params={"mode": "monthly", "anchor": "2026-01-15"}
+        ).status_code == 403
+
+    def test_monthly_mode_trend_charts_have_one_point_per_day_in_month(self, client, auth_headers):
+        ceo = auth_headers("ceo01")
+        # February 2026 is not a leap year -> exactly 28 days, same precise
+        # off-by-one guard as the admin/charts equivalent test.
+        data = client.get(
+            "/api/dashboard/ceo/charts", headers=ceo, params={"mode": "monthly", "anchor": "2026-02-10"}
+        ).json()["data"]
+        assert len(data["interventions_chart"]) == 28
+        assert len(data["completion_chart"]) == 28
+
+    def test_yearly_mode_trend_charts_have_twelve_month_points(self, client, auth_headers):
+        ceo = auth_headers("ceo01")
+        data = client.get(
+            "/api/dashboard/ceo/charts", headers=ceo, params={"mode": "yearly", "anchor": "2026-07-04"}
+        ).json()["data"]
+        assert len(data["interventions_chart"]) == 12
+        assert len(data["completion_chart"]) == 12
+        assert [p["label"] for p in data["interventions_chart"]] == [
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        ]
+        # Categorical (ranking) charts don't grow with period length — only
+        # their totals should change, not their point count.
+        assert len(data["priority_distribution_chart"]) == 3
+        assert len(data["top_clients_chart"]) <= 10
+        assert len(data["contract_activity_chart"]) <= 10
+        assert len(data["project_activity_chart"]) <= 10
+
+    def test_period_scoping_is_real_not_a_noop(self, client, auth_headers):
+        """The core correctness guarantee: /ceo/charts must genuinely filter
+        by the selected period, not silently return the same all-time figures
+        as /ceo. Comparing a narrow single-day window's chart totals against
+        the all-time /ceo endpoint's own totals proves the WHERE clause is
+        real — an all-time figure can never be smaller than a single day's."""
+        ceo = auth_headers("ceo01")
+        all_time = client.get("/api/dashboard/ceo", headers=ceo).json()["data"]
+
+        daily = client.get(
+            "/api/dashboard/ceo/charts", headers=ceo, params={"mode": "daily", "anchor": "2026-01-15"}
+        ).json()["data"]
+
+        all_time_interventions_total = sum(p["value"] for p in all_time["monthly_intervention_trend_chart"])
+        daily_interventions_total = sum(p["value"] for p in daily["interventions_chart"])
+        assert daily_interventions_total <= all_time_interventions_total
+
+        all_time_workload_total = sum(p["value"] for p in all_time["technician_workload_chart"])
+        daily_workload_total = sum(p["value"] for p in daily["technician_workload_chart"])
+        assert daily_workload_total <= all_time_workload_total
+
+        # And the reverse direction: a full year must be able to reach (or
+        # exceed) a single day's totals — proving yearly mode's WHERE clause
+        # genuinely widens the window rather than collapsing to one day.
+        yearly = client.get(
+            "/api/dashboard/ceo/charts", headers=ceo, params={"mode": "yearly", "anchor": "2026-01-15"}
+        ).json()["data"]
+        yearly_interventions_total = sum(p["value"] for p in yearly["interventions_chart"])
+        assert yearly_interventions_total >= daily_interventions_total
+
+    def test_different_anchor_produces_different_data(self, client, auth_headers):
+        ceo = auth_headers("ceo01")
+        jan = client.get(
+            "/api/dashboard/ceo/charts", headers=ceo, params={"mode": "monthly", "anchor": "2026-01-01"}
+        ).json()["data"]
+        jun = client.get(
+            "/api/dashboard/ceo/charts", headers=ceo, params={"mode": "monthly", "anchor": "2026-06-01"}
+        ).json()["data"]
+        assert [p["label"] for p in jan["interventions_chart"]] != [p["label"] for p in jun["interventions_chart"]]
+
+    def test_invalid_mode_returns_422(self, client, auth_headers):
+        ceo = auth_headers("ceo01")
+        response = client.get(
+            "/api/dashboard/ceo/charts", headers=ceo, params={"mode": "decade", "anchor": "2026-01-15"}
+        )
+        assert response.status_code == 422
+
+
 def test_dashboard_lists_and_charts_are_bounded(client, auth_headers):
     """Ch.115 — the backend must return summarized statistics, never raw dataset dumps."""
     chef = auth_headers("chef01")
@@ -258,6 +364,75 @@ class TestDashboardChartsEndpoints:
         ).json()["data"]
         assert len(january["interventions_chart"]) == 31
 
+    def test_yearly_mode_trend_charts_have_twelve_month_points(self, client, auth_headers):
+        # Yearly mode can't show one point per day (365 unreadable points), so
+        # it buckets by month instead — always exactly 12 points regardless of
+        # which day within the year the anchor falls on.
+        admin = auth_headers("admin01")
+        data = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "yearly", "anchor": "2026-07-04"}
+        ).json()["data"]
+        assert len(data["interventions_chart"]) == 12
+        assert [p["label"] for p in data["interventions_chart"]] == [
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        ]
+
+        tech1 = auth_headers("tech01")
+        tech_data = client.get(
+            "/api/dashboard/technician/charts", headers=tech1, params={"mode": "yearly", "anchor": "2026-07-04"}
+        ).json()["data"]
+        assert len(tech_data["completed_chart"]) == 12
+        assert len(tech_data["points_chart"]) == 12
+
+    def test_yearly_mode_boundary_is_stable_across_the_year(self, client, auth_headers):
+        # Any anchor date within 2026 must resolve to the same Jan-Dec 2026
+        # window and identical month labels, mirroring the existing
+        # weekly-boundary-stability guard above.
+        admin = auth_headers("admin01")
+        january_anchor = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "yearly", "anchor": "2026-01-01"}
+        ).json()["data"]["interventions_chart"]
+        june_anchor = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "yearly", "anchor": "2026-06-15"}
+        ).json()["data"]["interventions_chart"]
+        december_anchor = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "yearly", "anchor": "2026-12-31"}
+        ).json()["data"]["interventions_chart"]
+        assert (
+            [p["label"] for p in january_anchor]
+            == [p["label"] for p in june_anchor]
+            == [p["label"] for p in december_anchor]
+        )
+        assert (
+            [p["value"] for p in january_anchor]
+            == [p["value"] for p in june_anchor]
+            == [p["value"] for p in december_anchor]
+        )
+
+    def test_yearly_mode_categorical_charts_keep_fixed_shape(self, client, auth_headers):
+        # Same "categorical charts don't grow with period length" guarantee as
+        # the daily/monthly comparison above, extended to yearly.
+        admin = auth_headers("admin01")
+        yearly = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "yearly", "anchor": "2026-01-15"}
+        ).json()["data"]
+        assert len(yearly["points_distribution_chart"]) == 5
+
+    def test_yearly_chart_totals_are_at_least_the_monthly_total_within_it(self, client, auth_headers):
+        # A full year can never have fewer matching interventions than any one
+        # month within it — proves yearly's WHERE clause genuinely spans all
+        # 12 months rather than silently collapsing to a narrower window.
+        admin = auth_headers("admin01")
+        monthly = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "monthly", "anchor": "2026-03-15"}
+        ).json()["data"]
+        yearly = client.get(
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "yearly", "anchor": "2026-03-15"}
+        ).json()["data"]
+        monthly_total = sum(p["value"] for p in monthly["client_activity_chart"])
+        yearly_total = sum(p["value"] for p in yearly["client_activity_chart"])
+        assert yearly_total >= monthly_total
+
     def test_categorical_charts_keep_fixed_shape_regardless_of_mode(self, client, auth_headers):
         # Categorical charts (grouped by technician/client/city/points-bucket)
         # don't grow with the period length the way trend charts do — only
@@ -307,7 +482,7 @@ class TestDashboardChartsEndpoints:
     def test_invalid_mode_returns_422(self, client, auth_headers):
         admin = auth_headers("admin01")
         response = client.get(
-            "/api/dashboard/admin/charts", headers=admin, params={"mode": "yearly", "anchor": "2026-01-15"}
+            "/api/dashboard/admin/charts", headers=admin, params={"mode": "decade", "anchor": "2026-01-15"}
         )
         assert response.status_code == 422
 

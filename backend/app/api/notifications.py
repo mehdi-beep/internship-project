@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -10,6 +11,14 @@ from app.schemas.pagination import Page
 from app.services import notification_service
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+
+class DndUpdate(BaseModel):
+    dnd_enabled: bool
+
+
+class DndStatus(BaseModel):
+    dnd_enabled: bool
 
 
 @router.get("", response_model=ApiResponse[Page[NotificationOut]])
@@ -48,3 +57,18 @@ def mark_all_read(
 ) -> ApiResponse[dict]:
     count = notification_service.mark_all_read(db, current_user.id)
     return ApiResponse(message="All notifications marked as read.", data={"updated": count})
+
+
+@router.patch("/dnd", response_model=ApiResponse[DndStatus])
+def set_dnd(
+    payload: DndUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ApiResponse[DndStatus]:
+    """Do Not Disturb — always acts on the caller's own account (current_user,
+    never a path/body-supplied user id), since this is a personal preference
+    each account manages for itself, not something set on another user's
+    behalf."""
+    user = notification_service.set_dnd(db, current_user.id, payload.dnd_enabled)
+    message = "Do Not Disturb enabled." if user.dnd_enabled else "Do Not Disturb disabled."
+    return ApiResponse(message=message, data=DndStatus(dnd_enabled=user.dnd_enabled))

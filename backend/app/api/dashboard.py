@@ -11,6 +11,7 @@ from app.schemas.dashboard import (
     AdminDashboard,
     AdminDashboardCharts,
     CeoDashboard,
+    CeoDashboardCharts,
     ChefDashboard,
     ChefDashboardCharts,
     TechnicianDashboard,
@@ -82,3 +83,15 @@ def ceo_dashboard(
     _: User = Depends(require_roles("ceo")),
 ) -> ApiResponse[CeoDashboard]:
     return ApiResponse(data=dashboard_service.get_ceo_dashboard(db))
+
+
+# CEO-exclusive, unlike /admin/charts (which admin_supervisor also sees) —
+# matches the existing /ceo route's own gating, not the shared admin pattern.
+@router.get("/ceo/charts", response_model=ApiResponse[CeoDashboardCharts])
+def ceo_dashboard_charts(
+    mode: PeriodMode = Query(...),
+    anchor: date = Query(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("ceo")),
+) -> ApiResponse[CeoDashboardCharts]:
+    return ApiResponse(data=dashboard_service.get_ceo_dashboard_charts(db, mode, anchor))

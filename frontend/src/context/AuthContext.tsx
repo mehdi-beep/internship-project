@@ -8,6 +8,7 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (username: string, password: string) => Promise<UserProfile>;
   logout: () => void;
+  updateUser: (patch: Partial<UserProfile>) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -54,6 +55,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout: () => {
         localStorage.removeItem(TOKEN_KEY);
         setUser(null);
+      },
+      // Patches the locally-held profile after a self-service change (e.g.
+      // Do Not Disturb) succeeds server-side, so every screen reading `user`
+      // reflects it immediately without a full /auth/me refetch.
+      updateUser: (patch: Partial<UserProfile>) => {
+        setUser((current) => (current ? { ...current, ...patch } : current));
       },
     }),
     [user, isLoading],

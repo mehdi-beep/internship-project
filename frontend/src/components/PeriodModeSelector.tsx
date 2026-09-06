@@ -4,7 +4,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import dayjs from "dayjs";
 
-export type PeriodMode = "daily" | "weekly" | "monthly";
+export type PeriodMode = "daily" | "weekly" | "monthly" | "yearly";
 
 interface PeriodModeSelectorProps {
   mode: PeriodMode;
@@ -17,15 +17,17 @@ interface PeriodModeSelectorProps {
 // "week" (not "isoWeek") for stepping — a week is always 7 days regardless
 // of locale, so plain `.add`/`.subtract` already steps correctly. "isoWeek"
 // is only needed for `startOf`, which differs by locale (Sunday vs Monday).
-function stepUnit(mode: PeriodMode): "day" | "week" | "month" {
+function stepUnit(mode: PeriodMode): "day" | "week" | "month" | "year" {
   if (mode === "daily") return "day";
   if (mode === "weekly") return "week";
+  if (mode === "yearly") return "year";
   return "month";
 }
 
 function snapToStart(value: string, mode: PeriodMode): string {
   if (mode === "weekly") return dayjs(value).startOf("isoWeek").format("YYYY-MM-DD");
   if (mode === "monthly") return dayjs(value).startOf("month").format("YYYY-MM-DD");
+  if (mode === "yearly") return dayjs(value).startOf("year").format("YYYY-MM-DD");
   return dayjs(value).startOf("day").format("YYYY-MM-DD");
 }
 
@@ -56,6 +58,7 @@ export default function PeriodModeSelector({ mode, anchor, onModeChange, onAncho
         <ToggleButton value="daily">Day</ToggleButton>
         <ToggleButton value="weekly">Week</ToggleButton>
         <ToggleButton value="monthly">Month</ToggleButton>
+        <ToggleButton value="yearly">Year</ToggleButton>
       </ToggleButtonGroup>
 
       <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
@@ -63,7 +66,24 @@ export default function PeriodModeSelector({ mode, anchor, onModeChange, onAncho
           <ChevronLeftIcon fontSize="small" />
         </IconButton>
 
-        {mode === "monthly" ? (
+        {mode === "yearly" ? (
+          // No native <input type="year"> exists — a constrained number input
+          // is the standard substitute, matching this file's one-branch-per-
+          // granularity pattern (monthly already has its own "month" branch).
+          <TextField
+            size="small"
+            type="number"
+            value={current.format("YYYY")}
+            onChange={(e) => {
+              const year = Number(e.target.value);
+              if (e.target.value && Number.isInteger(year) && year > 0) {
+                onAnchorChange(current.year(year).startOf("year").format("YYYY-MM-DD"));
+              }
+            }}
+            slotProps={{ htmlInput: { min: 1, style: { padding: "4px 8px", fontSize: "0.8rem" } } }}
+            sx={{ width: 150 }}
+          />
+        ) : mode === "monthly" ? (
           <TextField
             size="small"
             type="month"

@@ -156,9 +156,29 @@ class CeoDashboard(BaseModel):
     upcoming_planned_interventions: int
     urgent_planning_count: int
 
-    # --- Trends and roll-ups ---
+    # --- Trends and roll-ups (fixed 12-month trailing window — kept as-is
+    # for compatibility with any caller that only hits this endpoint; see
+    # CeoDashboardCharts below for the mode-aware Day/Week/Month/Year
+    # versions of interventions_chart/completion_chart specifically) ---
     monthly_intervention_trend_chart: list[ChartPoint]
     completion_trend_chart: list[ChartPoint]
+    technician_workload_chart: list[ChartPoint]
+    top_clients_chart: list[ChartPoint]
+    contract_activity_chart: list[ChartPoint]
+    project_activity_chart: list[ChartPoint]
+    priority_distribution_chart: list[ChartPoint]
+
+
+# --- CEO mode-aware "single selected period" chart bundle ---
+# Same split as Admin's Round-3 pair: CeoDashboard above keeps its all-time/
+# fixed-12-month fields for compatibility with any existing caller of /ceo;
+# this bundle is the separate Day/Week/Month/Year-scoped version of the same
+# 7 chart concepts, populated by GET /ceo/charts.
+
+
+class CeoDashboardCharts(BaseModel):
+    interventions_chart: list[ChartPoint]
+    completion_chart: list[ChartPoint]
     technician_workload_chart: list[ChartPoint]
     top_clients_chart: list[ChartPoint]
     contract_activity_chart: list[ChartPoint]

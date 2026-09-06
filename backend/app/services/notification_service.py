@@ -50,6 +50,14 @@ def _dispatch_external(db: Session, user_id: int, subject: str, body: str, link_
         recipient = user_repository.get(db, user_id)
         if recipient is None:
             return
+        if recipient.dnd_enabled:
+            # Do Not Disturb: the in-app notification was already written by
+            # the caller before this function runs, so it still shows up
+            # (unread) once DND is turned back off — only this external copy
+            # is skipped. Dispatch never happens a second time for the same
+            # notification, so a message created during DND is never emailed
+            # later either, even after DND is deactivated.
+            return
         full_body = body
         if link_path:
             base = get_settings().frontend_base_url.rstrip("/")
@@ -78,6 +86,20 @@ def mark_read(db: Session, user_id: int, notification_id: int) -> Notification:
 
 def mark_all_read(db: Session, user_id: int) -> int:
     return notification_repository.mark_all_read(db, user_id)
+
+
+def set_dnd(db: Session, user_id: int, dnd_enabled: bool):
+    """Do Not Disturb: acts on the caller's own account only (the API layer
+    passes `current_user`, never an arbitrary target id — this is a personal
+    preference, not something one user sets for another). Toggling this off
+    does not retroactively send anything: notifications that arrived while it
+    was on were already skipped, once, at creation time (see
+    _dispatch_external) and simply remain in the in-app list, unread, exactly
+    as any other unread notification would."""
+    user = user_repository.get(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    return user_repository.set_dnd(db, user, dnd_enabled)
 
 
 def notify_new_assignment(

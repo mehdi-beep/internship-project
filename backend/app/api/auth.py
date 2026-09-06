@@ -20,6 +20,7 @@ def _to_profile(user: User) -> UserProfile:
         username=user.username,
         email=user.email,
         role=user.role.name.value,
+        dnd_enabled=user.dnd_enabled,
     )
 
 

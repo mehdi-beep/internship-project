@@ -7,6 +7,7 @@ export interface UserProfile {
   username: string;
   email: string;
   role: UserRole;
+  dnd_enabled: boolean;
 }
 
 export interface ApiResponse<T> {

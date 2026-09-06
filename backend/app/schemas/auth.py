@@ -25,6 +25,7 @@ class UserProfile(BaseModel):
     username: str
     email: str
     role: str
+    dnd_enabled: bool
 
 
 class TokenResponse(BaseModel):

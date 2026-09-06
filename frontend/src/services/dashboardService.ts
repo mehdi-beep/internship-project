@@ -4,6 +4,7 @@ import type {
   AdminDashboard,
   AdminDashboardCharts,
   CeoDashboard,
+  CeoDashboardCharts,
   ChefDashboard,
   ChefDashboardCharts,
   TechnicianDashboard,
@@ -23,3 +24,6 @@ export const getSupervisorDashboardCharts = (mode: PeriodMode, anchor: string) =
 
 export const getAdminDashboardCharts = (mode: PeriodMode, anchor: string) =>
   fetchOne<AdminDashboardCharts>(`/dashboard/admin/charts?mode=${mode}&anchor=${anchor}`);
+
+export const getCeoDashboardCharts = (mode: PeriodMode, anchor: string) =>
+  fetchOne<CeoDashboardCharts>(`/dashboard/ceo/charts?mode=${mode}&anchor=${anchor}`);

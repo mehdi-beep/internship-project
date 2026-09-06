@@ -6,17 +6,21 @@ import {
   Box,
   Button,
   CircularProgress,
+  FormControlLabel,
   List,
   ListItemButton,
   ListItemText,
   Stack,
+  Switch,
   Typography,
 } from "@mui/material";
+import NotificationsOffIcon from "@mui/icons-material/NotificationsOffOutlined";
 import dayjs from "dayjs";
 import {
   listNotifications,
   markAllNotificationsRead,
   markNotificationRead,
+  setDoNotDisturb,
 } from "../services/notificationService";
 import { resolveNotificationPath } from "../utils/notificationRouting";
 import { categorizeNotification } from "../utils/notificationCategory";
@@ -27,7 +31,7 @@ import type { Notification } from "../types/notification";
 export default function NotificationsPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [page, setPage] = useState(1);
 
   const { data, isLoading, isError } = useQuery({
@@ -47,6 +51,11 @@ export default function NotificationsPage() {
     onSuccess: invalidate,
   });
 
+  const dndMutation = useMutation({
+    mutationFn: (nextEnabled: boolean) => setDoNotDisturb(nextEnabled),
+    onSuccess: (result) => updateUser({ dnd_enabled: result.dnd_enabled }),
+  });
+
   const hasUnread = (data?.items ?? []).some((n) => !n.read);
 
   const handleNotificationClick = (notification: Notification) => {
@@ -63,14 +72,34 @@ export default function NotificationsPage() {
 
   return (
     <Box>
-      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 2, flexWrap: "wrap", gap: 1 }}>
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
           Notifications
         </Typography>
-        <Button disabled={!hasUnread || markAllReadMutation.isPending} onClick={() => markAllReadMutation.mutate()}>
-          Mark all as read
-        </Button>
+        <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={user?.dnd_enabled ?? false}
+                disabled={dndMutation.isPending}
+                onChange={(e) => dndMutation.mutate(e.target.checked)}
+              />
+            }
+            label="Do Not Disturb"
+          />
+          <Button disabled={!hasUnread || markAllReadMutation.isPending} onClick={() => markAllReadMutation.mutate()}>
+            Mark all as read
+          </Button>
+        </Stack>
       </Stack>
+
+      {user?.dnd_enabled && (
+        <Alert severity="info" icon={<NotificationsOffIcon fontSize="inherit" />} sx={{ mb: 2 }}>
+          Do Not Disturb is on. New notifications still appear here as unread, but no email or WhatsApp
+          alert is sent for them — including any that arrive while it stays on. Turn it off to resume
+          receiving alerts for new notifications going forward.
+        </Alert>
+      )}
 
       {isLoading && (
         <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>

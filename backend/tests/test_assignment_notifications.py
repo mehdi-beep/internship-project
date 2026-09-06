@@ -288,6 +288,136 @@ class TestConfiguredChannelsAreActuallyUsed:
         assert captured["json"]["to"] == "212600000000"
 
 
+class TestDoNotDisturb:
+    """Do Not Disturb: suppresses only the external (email/WhatsApp) copy of
+    a notification, and only for the account that enabled it. The in-app
+    notification is unaffected — it's created and left unread exactly as it
+    would be otherwise, which is what makes "stays unread until DND is
+    turned off and they're read" true with no extra tracking needed."""
+
+    def _fake_smtp(self, monkeypatch):
+        from app.services import delivery_service
+
+        sent = []
+
+        class FakeSMTP:
+            def __init__(self, *a, **kw):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def starttls(self):
+                pass
+
+            def login(self, *a):
+                pass
+
+            def send_message(self, message):
+                sent.append(message)
+
+        monkeypatch.setattr(delivery_service.smtplib, "SMTP", FakeSMTP)
+        return sent
+
+    def _configure_email(self, monkeypatch):
+        from config import get_settings
+
+        settings = get_settings()
+        monkeypatch.setattr(settings, "email_enabled", True, raising=False)
+        monkeypatch.setattr(settings, "smtp_host", "smtp.example.com", raising=False)
+        monkeypatch.setattr(settings, "smtp_from", "bims@example.com", raising=False)
+
+    def test_dnd_defaults_off(self, client, auth_headers):
+        tech1 = auth_headers("tech01")
+        assert client.get("/api/auth/me", headers=tech1).json()["data"]["dnd_enabled"] is False
+
+    def test_enabling_dnd_persists_and_acts_on_own_account_only(self, client, auth_headers):
+        tech1 = auth_headers("tech01")
+        tech2 = auth_headers("tech02")
+
+        response = client.patch("/api/notifications/dnd", json={"dnd_enabled": True}, headers=tech1)
+        assert response.status_code == 200
+        assert response.json()["data"]["dnd_enabled"] is True
+
+        assert client.get("/api/auth/me", headers=tech1).json()["data"]["dnd_enabled"] is True
+        assert client.get("/api/auth/me", headers=tech2).json()["data"]["dnd_enabled"] is False
+
+        # Cleanup: turn it back off so this test doesn't leak state into others
+        # sharing the same seeded tech01 account within this module.
+        client.patch("/api/notifications/dnd", json={"dnd_enabled": False}, headers=tech1)
+
+    def test_dnd_suppresses_email_but_not_the_in_app_notification(self, client, auth_headers, monkeypatch):
+        self._configure_email(monkeypatch)
+        sent = self._fake_smtp(monkeypatch)
+
+        admin = auth_headers("admin01")
+        tech1 = auth_headers("tech01")
+        client_id, site_id, t1_id, _ = _refs(client, admin)
+
+        client.patch("/api/notifications/dnd", json={"dnd_enabled": True}, headers=tech1)
+        try:
+            planning = _create_planning(client, admin, client_id, site_id, t1_id, date="2026-11-16")
+
+            note = next(n for n in _notifications(client, tech1) if n["related_planning_id"] == planning["id"])
+            assert note["read"] is False, "in-app notification still lands and stays unread, DND or not"
+            assert sent == [], "no email should be sent for a notification created while DND is on"
+        finally:
+            client.patch("/api/notifications/dnd", json={"dnd_enabled": False}, headers=tech1)
+
+    def test_turning_dnd_back_off_does_not_retroactively_send_the_suppressed_email(
+        self, client, auth_headers, monkeypatch
+    ):
+        """The core guarantee from the feature request: a notification that
+        arrived during DND must never be emailed later either, even after
+        DND is deactivated. Dispatch happens once, synchronously, at
+        creation time — there is no retry path to prove absent, so this
+        confirms no email appears even after DND is off and more activity
+        happens."""
+        self._configure_email(monkeypatch)
+        sent = self._fake_smtp(monkeypatch)
+
+        admin = auth_headers("admin01")
+        tech1 = auth_headers("tech01")
+        client_id, site_id, t1_id, _ = _refs(client, admin)
+
+        client.patch("/api/notifications/dnd", json={"dnd_enabled": True}, headers=tech1)
+        _create_planning(client, admin, client_id, site_id, t1_id, date="2026-11-17")
+        assert sent == []
+
+        client.patch("/api/notifications/dnd", json={"dnd_enabled": False}, headers=tech1)
+        assert sent == [], "disabling DND must not send anything for what arrived while it was on"
+
+        # A fresh notification created after DND is off sends normally,
+        # proving the suppression was scoped to the DND window, not a
+        # permanently broken email path.
+        _create_planning(client, admin, client_id, site_id, t1_id, date="2026-11-18")
+        assert len(sent) == 1
+
+    def test_dnd_enabled_technician_does_not_block_the_other_technicians_email(
+        self, client, auth_headers, monkeypatch
+    ):
+        self._configure_email(monkeypatch)
+        sent = self._fake_smtp(monkeypatch)
+
+        admin = auth_headers("admin01")
+        tech1 = auth_headers("tech01")
+        tech2 = auth_headers("tech02")
+        client_id, site_id, t1_id, t2_id = _refs(client, admin)
+
+        client.patch("/api/notifications/dnd", json={"dnd_enabled": True}, headers=tech1)
+        try:
+            _create_planning(client, admin, client_id, site_id, t1_id, date="2026-11-19")
+            assert sent == [], "tech01 has DND on"
+
+            _create_planning(client, admin, client_id, site_id, t2_id, date="2026-11-20")
+            assert len(sent) == 1, "tech02 has DND off and should still be emailed normally"
+        finally:
+            client.patch("/api/notifications/dnd", json={"dnd_enabled": False}, headers=tech1)
+
+
 class TestExistingNotificationBehaviourUnchanged:
     def test_notifications_remain_scoped_to_their_own_recipient(self, client, auth_headers):
         tech1, tech2 = auth_headers("tech01"), auth_headers("tech02")

@@ -100,6 +100,16 @@ export interface AdminDashboardCharts {
   city_activity_chart: ChartPoint[];
 }
 
+export interface CeoDashboardCharts {
+  interventions_chart: ChartPoint[];
+  completion_chart: ChartPoint[];
+  technician_workload_chart: ChartPoint[];
+  top_clients_chart: ChartPoint[];
+  contract_activity_chart: ChartPoint[];
+  project_activity_chart: ChartPoint[];
+  priority_distribution_chart: ChartPoint[];
+}
+
 export interface CeoDashboard {
   total_interventions: number;
   completed_interventions: number;
