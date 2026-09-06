@@ -206,6 +206,114 @@ class TestRejectionBranches:
         assert client.put(f"/api/interventions/{submitted['id']}", json=edit_payload, headers=tech1).status_code == 200
 
 
+class TestApprovalWorkflowEmailsAreActuallyUsed:
+    """Every notification in the approval workflow gets an external (email)
+    copy too, not just the assignment-family ones Task 4 originally covered.
+    Reuses the same FakeSMTP proof pattern as
+    test_assignment_notifications.py's TestConfiguredChannelsAreActuallyUsed
+    — a 200 response proves nothing about whether an email was actually
+    attempted, so each test here inspects the captured message itself."""
+
+    def _fake_smtp(self, monkeypatch):
+        from app.services import delivery_service
+
+        sent = []
+
+        class FakeSMTP:
+            def __init__(self, *a, **kw):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def starttls(self):
+                pass
+
+            def login(self, *a):
+                pass
+
+            def send_message(self, message):
+                sent.append(message)
+
+        monkeypatch.setattr(delivery_service.smtplib, "SMTP", FakeSMTP)
+        return sent
+
+    def _configure_email(self, monkeypatch):
+        from config import get_settings
+
+        settings = get_settings()
+        monkeypatch.setattr(settings, "email_enabled", True, raising=False)
+        monkeypatch.setattr(settings, "smtp_host", "smtp.example.com", raising=False)
+        monkeypatch.setattr(settings, "smtp_from", "bims@example.com", raising=False)
+
+    def test_submission_emails_every_active_chef(self, client, auth_headers, monkeypatch, refs):
+        self._configure_email(monkeypatch)
+        sent = self._fake_smtp(monkeypatch)
+        tech1 = auth_headers("tech01")
+
+        _create_submitted(client, tech1, refs)
+
+        subjects = [m["Subject"] for m in sent]
+        assert subjects.count("BIMS — Intervention Submitted") == 2, "both chef01 and chef02 are active Chefs"
+
+    def test_technical_approval_emails_every_admin_and_the_ceo(self, client, auth_headers, monkeypatch, refs):
+        self._configure_email(monkeypatch)
+        sent = self._fake_smtp(monkeypatch)
+        tech1 = auth_headers("tech01")
+        chef = auth_headers("chef01")
+        submitted = _create_submitted(client, tech1, refs)
+
+        sent.clear()  # discard the submission email from _create_submitted above
+        client.post(f"/api/interventions/{submitted['id']}/technical-approval", json={"decision": "approved"}, headers=chef)
+
+        subjects = [m["Subject"] for m in sent]
+        assert subjects.count("BIMS — Administrative Approval Needed") == 3, "admin01, admin02, and ceo01"
+
+    def test_technical_rejection_emails_the_technician_with_the_reason(self, client, auth_headers, monkeypatch, refs):
+        self._configure_email(monkeypatch)
+        sent = self._fake_smtp(monkeypatch)
+        tech1 = auth_headers("tech01")
+        chef = auth_headers("chef01")
+        submitted = _create_submitted(client, tech1, refs)
+
+        sent.clear()
+        client.post(
+            f"/api/interventions/{submitted['id']}/technical-approval",
+            json={"decision": "rejected", "comment": "Missing details."},
+            headers=chef,
+        )
+
+        rejection_emails = [m for m in sent if m["Subject"] == "BIMS — Intervention Rejected"]
+        assert len(rejection_emails) == 1
+        tech1_email = client.get("/api/auth/me", headers=tech1).json()["data"]["email"]
+        assert rejection_emails[0]["To"] == tech1_email
+        assert "Missing details." in rejection_emails[0].get_content()
+
+    def test_full_approval_emails_the_technician(self, client, auth_headers, monkeypatch, refs):
+        self._configure_email(monkeypatch)
+        sent = self._fake_smtp(monkeypatch)
+        tech1 = auth_headers("tech01")
+        chef = auth_headers("chef01")
+        admin = auth_headers("admin01")
+        submitted = _create_submitted(client, tech1, refs)
+        client.post(f"/api/interventions/{submitted['id']}/technical-approval", json={"decision": "approved"}, headers=chef)
+
+        sent.clear()
+        client.post(
+            f"/api/interventions/{submitted['id']}/administrative-approval",
+            json={"decision": "approved"},
+            headers=admin,
+        )
+
+        approval_emails = [m for m in sent if m["Subject"] == "BIMS — Intervention Approved"]
+        assert len(approval_emails) == 1
+        tech1_email = client.get("/api/auth/me", headers=tech1).json()["data"]["email"]
+        assert approval_emails[0]["To"] == tech1_email
+
+
 class TestMyRecentDecisions:
     def test_reflects_own_decisions_only(self, client, auth_headers, refs):
         tech1 = auth_headers("tech01")

@@ -186,15 +186,17 @@ def notify_chefs_of_submission(db: Session, bi_number: str, intervention_id: int
     technician submits an intervention (the spec doesn't designate a single
     chef to route to, so all of them are notified rather than risking one
     supervisor missing a submission)."""
+    body = f"Intervention {bi_number} was submitted and is awaiting technical approval."
     stmt = user_repository.list_query(role=RoleName.CHEF_TECHNICIEN, active_only=True, search=None)
     for chef in db.scalars(stmt).all():
         notification_repository.create(
             db,
             user_id=chef.id,
             title="Intervention Submitted",
-            message=f"Intervention {bi_number} was submitted and is awaiting technical approval.",
+            message=body,
             related_intervention_id=intervention_id,
         )
+        _dispatch_external(db, chef.id, "BIMS — Intervention Submitted", body, link_path="/approvals/technical")
 
 
 def notify_admins_of_technical_approval(db: Session, bi_number: str, intervention_id: int) -> None:
@@ -202,6 +204,7 @@ def notify_admins_of_technical_approval(db: Session, bi_number: str, interventio
     completes. The CEO is notified too (Task 15 — CEO shares administrative
     approval power with Admin, so this is the one workflow moment genuinely
     relevant to a CEO, not a blanket copy of every technician notification)."""
+    body = f"Intervention {bi_number} passed technical approval and is awaiting administrative approval."
     stmt = user_repository.list_query(role=RoleName.ADMIN_SUPERVISOR, active_only=True, search=None)
     ceo_stmt = user_repository.list_query(role=RoleName.CEO, active_only=True, search=None)
     for recipient in [*db.scalars(stmt).all(), *db.scalars(ceo_stmt).all()]:
@@ -209,8 +212,11 @@ def notify_admins_of_technical_approval(db: Session, bi_number: str, interventio
             db,
             user_id=recipient.id,
             title="Administrative Approval Needed",
-            message=f"Intervention {bi_number} passed technical approval and is awaiting administrative approval.",
+            message=body,
             related_intervention_id=intervention_id,
+        )
+        _dispatch_external(
+            db, recipient.id, "BIMS — Administrative Approval Needed", body, link_path="/approvals/administrative"
         )
 
 
@@ -219,21 +225,25 @@ def notify_technician_of_rejection(
 ) -> None:
     """Ch.25/26 — the technician is notified whenever their intervention is rejected."""
     suffix = f" Reason: {reason}" if reason else ""
+    body = f"Intervention {bi_number} was rejected — please review and resubmit.{suffix}"
     notification_repository.create(
         db,
         user_id=technician_id,
         title="Intervention Rejected",
-        message=f"Intervention {bi_number} was rejected — please review and resubmit.{suffix}",
+        message=body,
         related_intervention_id=intervention_id,
     )
+    _dispatch_external(db, technician_id, "BIMS — Intervention Rejected", body, link_path="/interventions")
 
 
 def notify_technician_of_full_approval(db: Session, technician_id: int, bi_number: str, intervention_id: int) -> None:
     """Ch.26/31 — the technician is notified once an intervention is fully approved (locked)."""
+    body = f"Intervention {bi_number} has been fully approved."
     notification_repository.create(
         db,
         user_id=technician_id,
         title="Intervention Approved",
-        message=f"Intervention {bi_number} has been fully approved.",
+        message=body,
         related_intervention_id=intervention_id,
     )
+    _dispatch_external(db, technician_id, "BIMS — Intervention Approved", body, link_path="/interventions")
