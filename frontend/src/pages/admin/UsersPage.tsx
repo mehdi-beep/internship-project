@@ -139,6 +139,16 @@ export default function UsersPage() {
         role: roleFilter || undefined,
         active_only: !showInactive,
       }),
+    // Two admins can have this list open at once — a deletion/edit by one
+    // must reach the other's screen without a manual refresh. Matches
+    // Display/Planning's own POLL_INTERVAL_MS exactly. Safe alongside the
+    // edit modal below: openEdit() captures a row's values into react-hook-
+    // form's local state once via reset() at click time, and the modal never
+    // re-reads `data` live afterward, so a background refetch swapping the
+    // table's rows underneath an open modal doesn't touch its already-
+    // captured fields.
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: true,
   });
 
   const { register, control, handleSubmit, reset, watch, formState: { errors } } = useForm<FormValues>();

@@ -53,6 +53,14 @@ export default function ContractsPage() {
         start_date_from: startDateFrom || undefined,
         start_date_to: startDateTo || undefined,
       }),
+    // Two admins can have this list open at once — an archive/delete by one
+    // must reach the other's screen without a manual refresh. Matches
+    // Display/Planning's own POLL_INTERVAL_MS exactly. This page has no edit
+    // modal bound to live query data (only a create form and an archive
+    // confirmation, neither of which reads `data` while open), so a
+    // background refetch has nothing in-progress to disrupt.
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: true,
   });
 
   const { data: clientsData } = useQuery({

@@ -433,6 +433,154 @@ class TestDashboardsAndReportsUnaffectedByRuleChanges:
         assert response.status_code == 200
 
 
+class TestAppSettingsRoleGating:
+    """Task: configurable company timezone offset — GET/PUT /point-rules/settings
+    reuses the exact same ADMIN_ONLY gating as every other point-rules route."""
+
+    def test_technician_cannot_get(self, client, auth_headers):
+        tech = auth_headers("tech01")
+        assert client.get("/api/point-rules/settings", headers=tech).status_code == 403
+
+    def test_chef_cannot_get(self, client, auth_headers):
+        chef = auth_headers("chef01")
+        assert client.get("/api/point-rules/settings", headers=chef).status_code == 403
+
+    def test_technician_cannot_put(self, client, auth_headers):
+        tech = auth_headers("tech01")
+        response = client.put(
+            "/api/point-rules/settings", json={"company_utc_offset_minutes": 120}, headers=tech
+        )
+        assert response.status_code == 403
+
+    def test_unauthenticated_request_rejected(self, client):
+        assert client.get("/api/point-rules/settings").status_code == 401
+
+    def test_admin_can_get(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        response = client.get("/api/point-rules/settings", headers=admin)
+        assert response.status_code == 200
+        # 60 = UTC+1, the documented default approximating Casablanca's most
+        # common recent offset (see AppSettings model docs) — asserted here
+        # so a regression that silently changes the seeded default is caught.
+        assert response.json()["data"]["company_utc_offset_minutes"] == 60
+
+    def test_admin_can_put(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        response = client.put(
+            "/api/point-rules/settings", json={"company_utc_offset_minutes": 120}, headers=admin
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["company_utc_offset_minutes"] == 120
+
+
+class TestAppSettingsRangeValidation:
+    """GMT-12 (-720) to GMT+14 (+840) inclusive, per business_logic_service.py's
+    documented explicit numeric-offset design (not a named/DST-aware timezone)."""
+
+    def test_boundary_values_accepted(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        low = client.put("/api/point-rules/settings", json={"company_utc_offset_minutes": -720}, headers=admin)
+        high = client.put("/api/point-rules/settings", json={"company_utc_offset_minutes": 840}, headers=admin)
+        assert low.status_code == 200 and low.json()["data"]["company_utc_offset_minutes"] == -720
+        assert high.status_code == 200 and high.json()["data"]["company_utc_offset_minutes"] == 840
+
+    def test_one_minute_below_minimum_rejected(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        response = client.put("/api/point-rules/settings", json={"company_utc_offset_minutes": -721}, headers=admin)
+        assert response.status_code == 422
+
+    def test_one_minute_above_maximum_rejected(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        response = client.put("/api/point-rules/settings", json={"company_utc_offset_minutes": 841}, headers=admin)
+        assert response.status_code == 422
+
+    def test_wildly_out_of_range_value_rejected(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        response = client.put("/api/point-rules/settings", json={"company_utc_offset_minutes": 100000}, headers=admin)
+        assert response.status_code == 422
+
+
+class TestCalculatePointsUsesConfiguredOffset:
+    """The core behavioral guarantee: calculate_points() must actually read
+    and apply the stored offset, not just allow it to be saved. Proven by
+    setting a distinctive, non-default offset (+120, i.e. two hours ahead of
+    UTC — deliberately NOT the +60 default, so a bug that silently ignores
+    the setting and keeps using the old default would fail this test) and
+    submitting at a UTC instant that only lands inside a specific point-rule
+    window once shifted by exactly that offset."""
+
+    def test_offset_change_moves_which_rule_window_a_utc_instant_falls_into(self, client, auth_headers):
+        admin = auth_headers("admin01")
+
+        # A dedicated rule far from every seeded default (17:00-19:00,
+        # 19:00-22:00, 22:00-00:00) so this test cannot collide with them.
+        client.post(
+            "/api/point-rules", json={"start_time": "08:00:00", "end_time": "09:00:00", "points": 42}, headers=admin
+        )
+
+        from datetime import datetime, timezone as dt_timezone
+        from app.database.session import SessionLocal
+        from app.services.business_logic_service import calculate_points
+
+        # 06:30 UTC: with the default +60 offset this is 07:30 local — outside
+        # the 08:00-09:00 rule, so the -1 fallback applies.
+        submission = datetime(2026, 8, 2, 6, 30, tzinfo=dt_timezone.utc)
+        db = SessionLocal()
+        try:
+            assert calculate_points(db, submission) == -1
+        finally:
+            db.close()
+
+        # Set the offset to +120 (UTC+2) — the same UTC instant is now 08:30
+        # local, squarely inside the 08:00-09:00 / +42 rule. This is the
+        # actual proof: only a real, consumed offset change could move the
+        # result from -1 to +42 for the exact same submission timestamp.
+        put_response = client.put(
+            "/api/point-rules/settings", json={"company_utc_offset_minutes": 120}, headers=admin
+        )
+        assert put_response.status_code == 200
+
+        db = SessionLocal()
+        try:
+            assert calculate_points(db, submission) == 42
+        finally:
+            db.close()
+
+    def test_offset_is_read_fresh_per_call_not_cached_at_import_time(self, client, auth_headers):
+        """Guards against a regression where the offset (or the timezone it
+        builds) is computed once at module import and reused — the setting
+        must affect the very next call, within the same process, with no
+        reload/restart involved."""
+        admin = auth_headers("admin01")
+        client.post(
+            "/api/point-rules", json={"start_time": "14:00:00", "end_time": "15:00:00", "points": 7}, headers=admin
+        )
+
+        from datetime import datetime, timezone as dt_timezone
+        from app.database.session import SessionLocal
+        from app.services.business_logic_service import calculate_points
+
+        submission = datetime(2026, 8, 2, 12, 30, tzinfo=dt_timezone.utc)
+
+        db = SessionLocal()
+        try:
+            # +60 default: 12:30 UTC -> 13:30 local, outside 14:00-15:00.
+            assert calculate_points(db, submission) == -1
+        finally:
+            db.close()
+
+        client.put("/api/point-rules/settings", json={"company_utc_offset_minutes": 90}, headers=admin)
+
+        db = SessionLocal()
+        try:
+            # +90: 12:30 UTC -> 14:00 local, now inside 14:00-15:00 -> +7.
+            # Same process, same already-imported module — proves the lookup
+            # happens at call time, not once at import.
+            assert calculate_points(db, submission) == 7
+        finally:
+            db.close()
+
+
 def _refs(client, admin_headers) -> dict:
     client_id = client.get("/api/clients", headers=admin_headers, params={"page_size": 1}).json()["data"]["items"][0]["id"]
     site_id = client.get(f"/api/clients/{client_id}/sites", headers=admin_headers).json()["data"]["items"][0]["id"]

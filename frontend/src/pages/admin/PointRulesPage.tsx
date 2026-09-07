@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -6,6 +6,8 @@ import {
   Button,
   Chip,
   IconButton,
+  MenuItem,
+  Paper,
   Stack,
   TextField,
   Tooltip,
@@ -25,11 +27,36 @@ import {
   createPointRule,
   deactivatePointRule,
   deletePointRule,
+  getAppSettings,
   listPointRules,
+  updateAppSettings,
   updatePointRule,
   type PointRuleInput,
 } from "../../services/pointRuleService";
 import type { PointRule } from "../../types/pointRule";
+
+// GMT-12 to GMT+14 in whole-hour steps (the backend's full supported range,
+// see app_settings_service.MIN/MAX_OFFSET_MINUTES) plus the well-known
+// half-hour/45-minute real-world offsets (India, Newfoundland, Nepal,
+// Chatham Islands, etc.) — a whole-hour-only dropdown would be an odd
+// omission given the range explicitly reaches GMT+14, itself a real offset
+// (Kiribati) most numeric pickers leave out entirely.
+const HALF_AND_QUARTER_HOUR_OFFSETS_MINUTES = [-570, -180, -30, 330, 345, 525, 570, 630] as const;
+
+function formatOffsetLabel(minutes: number): string {
+  const sign = minutes < 0 ? "-" : "+";
+  const abs = Math.abs(minutes);
+  const hours = Math.floor(abs / 60);
+  const mins = abs % 60;
+  return mins === 0 ? `GMT${sign}${hours}` : `GMT${sign}${hours}:${String(mins).padStart(2, "0")}`;
+}
+
+const UTC_OFFSET_OPTIONS_MINUTES = Array.from(
+  new Set([
+    ...Array.from({ length: 27 }, (_, i) => (i - 12) * 60), // GMT-12 .. GMT+14
+    ...HALF_AND_QUARTER_HOUR_OFFSETS_MINUTES,
+  ]),
+).sort((a, b) => a - b);
 
 function toInputTime(value: string): string {
   return value.slice(0, 5);
@@ -70,6 +97,36 @@ export default function PointRulesPage() {
 
   const sortedRules = [...(rules ?? [])].sort((a, b) => a.start_time.localeCompare(b.start_time));
   const pagedRules = sortedRules.slice((page - 1) * pageSize, page * pageSize);
+
+  // Company Timezone (fixed UTC offset) — a separate settings surface from
+  // the rules table above, but on the same page/router since both feed
+  // calculate_points(). Local `selectedOffset` state, synced from the fetched
+  // value via useEffect below rather than read live off `appSettings` in the
+  // dropdown's `value` prop directly: this lets the dropdown show the
+  // Administrator's in-progress selection immediately without waiting for
+  // the PUT round-trip, the same "local state captured on load" shape the
+  // rest of this page already uses for its edit modal (see openEdit's reset()
+  // below) — a background refetch of this query updating `appSettings`
+  // underneath a not-yet-saved selection would otherwise revert it.
+  const { data: appSettings, isLoading: settingsLoading, isError: settingsError } = useQuery({
+    queryKey: ["app-settings"],
+    queryFn: () => getAppSettings(),
+  });
+  const [selectedOffset, setSelectedOffset] = useState<number | null>(null);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+  useEffect(() => {
+    if (appSettings && selectedOffset === null) {
+      setSelectedOffset(appSettings.company_utc_offset_minutes);
+    }
+  }, [appSettings, selectedOffset]);
+
+  const updateSettingsMutation = useMutation({
+    mutationFn: (offsetMinutes: number) => updateAppSettings(offsetMinutes),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["app-settings"], updated);
+      setSettingsSaved(true);
+    },
+  });
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<PointRuleInput>();
 
@@ -203,6 +260,63 @@ export default function PointRulesPage() {
           New Rule
         </Button>
       </Stack>
+
+      <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+          Company Timezone (for Point Rule time windows)
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          A fixed UTC offset used to convert a submission's timestamp before checking it against the time windows
+          above. This is a fixed offset, not automatically DST-adjusted — if the real local clock changes (e.g.
+          seasonal shifts), an Administrator must update this value manually.
+        </Typography>
+        {settingsError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            Failed to load the company timezone setting. Please check your connection and try again.
+          </Alert>
+        )}
+        {updateSettingsMutation.isError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            Failed to save the company timezone. Please try again.
+          </Alert>
+        )}
+        <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+          <TextField
+            select
+            size="small"
+            label="Company Timezone"
+            disabled={settingsLoading}
+            value={selectedOffset ?? ""}
+            onChange={(e) => {
+              setSelectedOffset(Number(e.target.value));
+              setSettingsSaved(false);
+            }}
+            sx={{ minWidth: 220 }}
+          >
+            {UTC_OFFSET_OPTIONS_MINUTES.map((minutes) => (
+              <MenuItem key={minutes} value={minutes}>
+                {formatOffsetLabel(minutes)}
+              </MenuItem>
+            ))}
+          </TextField>
+          <Button
+            variant="contained"
+            disabled={
+              selectedOffset === null ||
+              selectedOffset === appSettings?.company_utc_offset_minutes ||
+              updateSettingsMutation.isPending
+            }
+            onClick={() => selectedOffset !== null && updateSettingsMutation.mutate(selectedOffset)}
+          >
+            Save
+          </Button>
+          {settingsSaved && !updateSettingsMutation.isPending && (
+            <Typography variant="body2" color="success.main">
+              Saved.
+            </Typography>
+          )}
+        </Stack>
+      </Paper>
 
       {isError && (
         <Alert severity="error" sx={{ mb: 2 }}>

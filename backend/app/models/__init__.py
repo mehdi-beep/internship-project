@@ -6,6 +6,7 @@ from app.models.contract import Contract
 from app.models.project import Project
 from app.models.travail import Travail
 from app.models.point_rule import PointRule
+from app.models.app_settings import AppSettings
 from app.models.intervention import Intervention
 from app.models.intervention_task import InterventionTask
 from app.models.intervention_technician import InterventionTechnician
@@ -25,6 +26,7 @@ __all__ = [
     "Project",
     "Travail",
     "PointRule",
+    "AppSettings",
     "Intervention",
     "InterventionTask",
     "InterventionTechnician",

@@ -1,7 +1,7 @@
 import { fetchOne, postOne, putOne, patchOne } from "../api/queryHelpers";
 import { apiClient } from "../api/client";
 import type { ApiResponse } from "../types/auth";
-import type { PointRule } from "../types/pointRule";
+import type { AppSettings, PointRule } from "../types/pointRule";
 
 export interface PointRuleInput {
   start_time: string;
@@ -23,3 +23,10 @@ export async function deletePointRule(id: number): Promise<void> {
     throw new Error(data.message ?? "Delete failed.");
   }
 }
+
+// Company-wide UTC offset (GMT-12..GMT+14, in minutes) feeding
+// calculate_points()'s local-time conversion — lives on this same service
+// file since it's served from /point-rules/settings on the same router.
+export const getAppSettings = () => fetchOne<AppSettings>("/point-rules/settings");
+export const updateAppSettings = (companyUtcOffsetMinutes: number) =>
+  putOne<AppSettings>("/point-rules/settings", { company_utc_offset_minutes: companyUtcOffsetMinutes });
