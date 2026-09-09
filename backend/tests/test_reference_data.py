@@ -73,6 +73,29 @@ class TestClients:
         assert result["items"] == []
         assert result["total"] == 0
 
+    def test_page_size_above_old_100_cap_returns_every_active_client(self, client, auth_headers):
+        # Regression guard for the whole-catalog dropdown bug: page_size was
+        # capped at le=100, so any catalog past 100 rows silently lost its
+        # tail in every lookup built on this route (ClientSelect and friends)
+        # with no error surfaced anywhere. Seed data alone (22 clients) can't
+        # exercise that — this pushes the real count past the old ceiling and
+        # asserts the full set comes back, not just that page_size=500 is
+        # accepted without a 422.
+        admin = auth_headers("admin01")
+        created_ids = set()
+        for i in range(105):
+            response = client.post(
+                "/api/clients", json={"client_name": f"Bulk Test Client {i:03d}"}, headers=admin
+            )
+            assert response.status_code == 200
+            created_ids.add(response.json()["data"]["id"])
+
+        result = client.get("/api/clients", params={"page_size": 500, "active_only": True}, headers=admin).json()["data"]
+        assert result["total"] > 100
+        returned_ids = {c["id"] for c in result["items"]}
+        assert created_ids <= returned_ids
+        assert len(result["items"]) == result["total"]
+
 
 class TestClientSitesCascade:
     def test_sites_cascade_by_client_rule_4(self, client, auth_headers):
@@ -276,3 +299,78 @@ class TestUsers:
         client.patch(f"/api/users/{created['id']}/activate", headers=admin)
         relogin = client.post("/api/auth/login", json={"username": "newtech01", "password": "NewPassword456!"})
         assert relogin.status_code == 200
+
+
+class TestTechnicianOptionsIdsFilter:
+    """ColleagueTechnicianSelect resolves an already-selected colleague back to
+    a name via GET /users/technicians?ids=..., since GET /users/{id} (the
+    obvious by-id resolve every other picker uses) is admin_supervisor/ceo
+    only and this picker is used by a technician on their own form."""
+
+    def test_ids_filter_returns_exactly_the_requested_subset(self, client, auth_headers):
+        # Real proof, not just a shape check: create several technicians (on
+        # top of seed data's own 10), request a specific subset by id, and
+        # assert exactly those come back — not more (every other technician
+        # correctly excluded), not fewer (every requested id correctly found).
+        admin = auth_headers("admin01")
+        created_ids = []
+        for i in range(5):
+            response = client.post(
+                "/api/users",
+                json={
+                    "first_name": "IdsFilter",
+                    "last_name": f"Tech{i:02d}",
+                    "username": f"idsfiltertech{i:02d}",
+                    "email": f"idsfiltertech{i:02d}@bims.local",
+                    "role": "technician",
+                    "password": "Password123!",
+                },
+                headers=admin,
+            )
+            assert response.status_code == 200
+            created_ids.append(response.json()["data"]["id"])
+
+        tech = auth_headers("tech01")
+        subset = created_ids[1:3]
+        result = client.get(
+            "/api/users/technicians", params={"ids": ",".join(str(i) for i in subset)}, headers=tech
+        )
+        assert result.status_code == 200
+        returned_ids = {t["id"] for t in result.json()["data"]}
+        assert returned_ids == set(subset)
+
+    def test_ids_filter_resolves_a_deactivated_technician(self, client, auth_headers):
+        # The actual edge case this exists for: a colleague technician added
+        # to an intervention, then later deactivated, must still resolve to a
+        # name when that intervention is reopened for edit — the plain
+        # (no-ids) call is active_only, which would otherwise silently drop
+        # them, same failure shape as the picker's original whole-catalog bug.
+        admin = auth_headers("admin01")
+        created = client.post(
+            "/api/users",
+            json={
+                "first_name": "SoonInactive",
+                "last_name": "Tech",
+                "username": "sooninactivetech",
+                "email": "sooninactivetech@bims.local",
+                "role": "technician",
+                "password": "Password123!",
+            },
+            headers=admin,
+        ).json()["data"]
+        client.patch(f"/api/users/{created['id']}/deactivate", headers=admin)
+
+        tech = auth_headers("tech01")
+        no_ids = client.get("/api/users/technicians", headers=tech).json()["data"]
+        assert all(t["id"] != created["id"] for t in no_ids), "sanity check: active_only excludes the deactivated technician"
+
+        by_id = client.get("/api/users/technicians", params={"ids": str(created["id"])}, headers=tech).json()["data"]
+        assert len(by_id) == 1
+        assert by_id[0]["id"] == created["id"]
+
+    def test_ids_filter_accessible_to_technician_role(self, client, auth_headers):
+        # The whole point of this filter over GET /users/{id}: a technician
+        # caller must not get 403 resolving a colleague's id.
+        tech1 = auth_headers("tech01")
+        result = client.get("/api/users/technicians", params={"ids": "1,2"}, headers=tech1)
+        assert result.status_code == 200

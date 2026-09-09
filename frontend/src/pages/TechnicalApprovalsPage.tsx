@@ -37,9 +37,12 @@ export default function TechnicalApprovalsPage() {
     enabled: viewMode === "calendar",
   });
 
+  // page_size must cover the whole active catalog — this resolves every
+  // intervention's client_id to a name, so a partial page here means a
+  // client beyond the cutoff silently falls back to "#<id>" in the table.
   const { data: clientsData } = useQuery({
     queryKey: ["clients", "lookup-all"],
-    queryFn: () => listClients({ page_size: 100, active_only: true }),
+    queryFn: () => listClients({ page_size: 500, active_only: true }),
   });
   const clientNameById = new Map((clientsData?.items ?? []).map((c) => [c.id, c.client_name]));
 

@@ -44,13 +44,23 @@ def list_users(
 @router.get("/technicians", response_model=ApiResponse[list[TechnicianOptionOut]])
 def list_technician_options(
     search: str | None = None,
+    # Comma-separated ids (e.g. "3,7,12"), not a repeated ?ids=3&ids=7 query
+    # param — the frontend's axios instance has no custom paramsSerializer
+    # configured, and its default array serialization (ids[]=3&ids[]=7)
+    # doesn't match what FastAPI's list[int] Query parsing expects, so a
+    # single plain string sidesteps that mismatch entirely. Lets
+    # ColleagueTechnicianSelect resolve an already-selected id (e.g. loading
+    # a saved intervention for edit) to a name without GET /users/{id}, which
+    # a technician-role caller can't use (admin_supervisor/ceo only).
+    ids: str | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("technician", "chef_technicien", "admin_supervisor", "ceo")),
 ) -> ApiResponse[list[TechnicianOptionOut]]:
     # A lightweight, all-roles-accessible lookup for colleague-technician pickers
     # (Ch.22 Section F) — unlike GET /users, this is intentionally reachable by a
     # technician JWT since the picker is used on the technician's own intervention form.
-    technicians = user_service.list_technician_options(db, search)
+    parsed_ids = [int(part) for part in ids.split(",") if part.strip()] if ids else None
+    technicians = user_service.list_technician_options(db, search, parsed_ids)
     return ApiResponse(data=[TechnicianOptionOut.model_validate(t) for t in technicians])
 
 

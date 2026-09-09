@@ -14,7 +14,7 @@ def find_by_email(db: Session, email: str) -> User | None:
     return db.scalar(select(User).where(User.email == email))
 
 
-def list_query(role: RoleName | None, active_only: bool, search: str | None) -> Select:
+def list_query(role: RoleName | None, active_only: bool, search: str | None, ids: list[int] | None = None) -> Select:
     stmt = select(User).options(joinedload(User.role))
     if role is not None:
         stmt = stmt.where(User.role.has(name=role))
@@ -25,6 +25,8 @@ def list_query(role: RoleName | None, active_only: bool, search: str | None) -> 
         stmt = stmt.where(
             (User.first_name.ilike(pattern)) | (User.last_name.ilike(pattern)) | (User.username.ilike(pattern))
         )
+    if ids is not None:
+        stmt = stmt.where(User.id.in_(ids))
     return stmt.order_by(User.last_name, User.first_name)
 
 

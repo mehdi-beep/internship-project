@@ -175,15 +175,23 @@ export default function MyInterventionsPage() {
     placeholderData: keepPreviousData,
   });
 
+  // page_size must cover the whole active catalog — this feeds the Client
+  // filter dropdown, every row's client name, and calendar event titles, so
+  // a partial page here means a client beyond the cutoff can't be filtered
+  // on or resolved.
   const { data: clientsData } = useQuery({
     queryKey: ["clients", "lookup-all"],
-    queryFn: () => listClients({ page_size: 100, active_only: true }),
+    queryFn: () => listClients({ page_size: 500, active_only: true }),
   });
   const clientNameById = new Map((clientsData?.items ?? []).map((c) => [c.id, c.client_name]));
 
   const { data: technicianOptions } = useQuery({
     queryKey: ["users", "technician-options"],
-    queryFn: listTechnicianOptions,
+    // Bare `listTechnicianOptions` (no wrapper) would hand React Query's own
+    // QueryFunctionContext to it as `params` — it now takes an optional
+    // params argument (used elsewhere for search/ids), so this must be
+    // invoked with an explicit empty call instead of passed by reference.
+    queryFn: () => listTechnicianOptions(),
     enabled: isPrivilegedViewer,
   });
 
@@ -192,14 +200,17 @@ export default function MyInterventionsPage() {
     queryFn: listSiteCities,
   });
 
+  // page_size must cover the whole active catalog — these feed the
+  // Contract/Project filter dropdowns, so a partial page here means a
+  // contract or project beyond the cutoff can't be filtered on at all.
   const { data: contractsData } = useQuery({
     queryKey: ["contracts", "lookup-all"],
-    queryFn: () => listContracts({ page_size: 100 }),
+    queryFn: () => listContracts({ page_size: 500 }),
   });
 
   const { data: projectsData } = useQuery({
     queryKey: ["projects", "lookup-all"],
-    queryFn: () => listProjects({ page_size: 100 }),
+    queryFn: () => listProjects({ page_size: 500 }),
   });
 
   // No client-side re-filtering by tab anymore — status/status_in above

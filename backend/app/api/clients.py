@@ -17,7 +17,11 @@ ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor", "ceo")
 @router.get("", response_model=ApiResponse[Page[ClientOut]])
 def list_clients(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    # Clients has no per-client narrower variant of this route (unlike
+    # sites/contracts/projects) — ClientSelect and every other client-lookup
+    # dropdown depend on this one route returning the whole active catalog in
+    # a single page, so the cap has to stay above the realistic total count.
+    page_size: int = Query(20, ge=1, le=500),
     search: str | None = None,
     active_only: bool = True,
     city: str | None = None,

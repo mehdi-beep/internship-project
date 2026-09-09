@@ -334,8 +334,8 @@ export default function InterventionFormPage() {
                     disabled={readOnly}
                     error={!!errors.client_id}
                     helperText={errors.client_id ? "Client is required" : undefined}
-                    onChange={(e) => {
-                      field.onChange(e);
+                    onChange={(id) => {
+                      field.onChange(id);
                       setValue("site_id", 0);
                       setValue("contract_id", "");
                       setValue("project_id", "");

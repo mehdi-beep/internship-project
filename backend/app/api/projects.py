@@ -30,7 +30,11 @@ def _to_page(result) -> Page[ProjectOut]:
 @router.get("/projects", response_model=ApiResponse[Page[ProjectOut]])
 def list_projects(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    # This is the unscoped, whole-catalog route — lookup dropdowns that need
+    # every project (not just one client's) depend on this cap staying above
+    # the realistic total count. list_projects_for_client below is the
+    # per-client variant and is capped separately.
+    page_size: int = Query(20, ge=1, le=500),
     client_id: int | None = None,
     status_filter: ProjectStatus | None = Query(None, alias="status"),
     search: str | None = None,

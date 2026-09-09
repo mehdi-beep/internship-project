@@ -77,9 +77,12 @@ export default function SitesPage() {
     refetchIntervalInBackground: true,
   });
 
+  // page_size must cover the whole active catalog — this feeds the Client
+  // filter dropdown and every row's client name, so a partial page here
+  // means a client beyond the cutoff can't be filtered on or resolved.
   const { data: clientsData } = useQuery({
     queryKey: ["clients", "lookup-all"],
-    queryFn: () => listClients({ page_size: 100, active_only: true }),
+    queryFn: () => listClients({ page_size: 500, active_only: true }),
   });
   const clientNameById = new Map((clientsData?.items ?? []).map((c) => [c.id, c.client_name]));
 

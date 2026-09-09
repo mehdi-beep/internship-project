@@ -29,8 +29,17 @@ export interface UserUpdateInput {
   role: UserRole;
 }
 
+export interface TechnicianOptionParams {
+  search?: string;
+  /** Comma-separated ids — resolves specific technicians (e.g. an
+   * intervention's already-selected colleagues) regardless of active status,
+   * bypassing GET /users/{id} which a technician-role caller can't use. */
+  ids?: string;
+}
+
 export const listUsers = (params: UserListParams = {}) => fetchPage<AppUser>("/users", params);
-export const listTechnicianOptions = () => fetchOne<TechnicianOption[]>("/users/technicians");
+export const listTechnicianOptions = (params: TechnicianOptionParams = {}) =>
+  fetchOne<TechnicianOption[]>("/users/technicians", params);
 export const listChefOptions = () => fetchOne<TechnicianOption[]>("/users/chefs");
 export const getUser = (id: number) => fetchOne<AppUser>(`/users/${id}`);
 export const createUser = (input: UserCreateInput) => postOne<AppUser>("/users", input);

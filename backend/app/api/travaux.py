@@ -17,7 +17,13 @@ ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor", "ceo")
 @router.get("", response_model=ApiResponse[Page[TravailOut]])
 def list_travaux(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    # Unlike every other reference-data list (capped at 100), travaux has no
+    # narrower natural scope to add a second, higher-capped lookup route for
+    # (contracts/projects/sites all have a per-client variant) — the whole
+    # catalog genuinely needs to fit in one request for TravauxMultiSelect's
+    # dropdown to show every option. 500 comfortably covers the real catalog
+    # (currently 183: 58 real + 125 legacy placeholder) with headroom.
+    page_size: int = Query(20, ge=1, le=500),
     search: str | None = None,
     active_only: bool = True,
     category: str | None = None,

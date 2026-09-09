@@ -27,7 +27,11 @@ def _to_page(result) -> Page[ClientSiteOut]:
 @router.get("/sites", response_model=ApiResponse[Page[ClientSiteOut]])
 def list_sites(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    # This is the unscoped, whole-catalog route — lookup dropdowns that need
+    # every active site (not just one client's) depend on this cap staying
+    # above the realistic total count. list_sites_for_client below is the
+    # per-client variant and is capped separately.
+    page_size: int = Query(20, ge=1, le=500),
     client_id: int | None = None,
     city: str | None = None,
     search: str | None = None,

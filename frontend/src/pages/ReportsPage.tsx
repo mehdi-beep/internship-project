@@ -57,9 +57,13 @@ export default function ReportsPage() {
     queryKey: ["users", "technicians-select"],
     queryFn: () => listUsers({ role: "technician", page_size: 100 }),
   });
+  // page_size must cover the whole active catalog — feeds the Client filter
+  // dropdown used by both the interventions report and the historical
+  // comparison tab, so a partial page here means a client beyond the
+  // cutoff can't be filtered on at all.
   const { data: clientsData } = useQuery({
     queryKey: ["clients", "lookup-all"],
-    queryFn: () => listClients({ page_size: 100, active_only: true }),
+    queryFn: () => listClients({ page_size: 500, active_only: true }),
   });
 
   const interventionFilters = {

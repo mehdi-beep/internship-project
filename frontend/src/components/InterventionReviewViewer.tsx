@@ -145,29 +145,42 @@ export default function InterventionReviewViewer({
     enabled: interventionId !== null,
   });
 
+  // Must cover the whole active catalog — resolves the intervention's
+  // client_id/site_id to a name, so a partial page here means a client or
+  // site beyond the cutoff silently falls back to "#<id>" in the viewer.
   const { data: clientsData } = useQuery({
     queryKey: ["clients", "lookup-all"],
-    queryFn: () => listClients({ page_size: 100, active_only: true }),
+    queryFn: () => listClients({ page_size: 500, active_only: true }),
   });
   const { data: sitesData } = useQuery({
     queryKey: ["sites", "lookup-all"],
-    queryFn: () => listSites({ page_size: 100, active_only: true }),
+    queryFn: () => listSites({ page_size: 500, active_only: true }),
   });
   const { data: travauxData } = useQuery({
     queryKey: ["travaux", "catalog-all"],
-    queryFn: () => listTravaux({ page_size: 100, active_only: true }),
+    // Must cover the whole active catalog — this resolves every travail_id
+    // on the intervention to its name/code, so a partial page here means a
+    // task using a travail beyond the cutoff silently fails to resolve.
+    queryFn: () => listTravaux({ page_size: 500, active_only: true }),
   });
   const { data: technicianOptions } = useQuery({
     queryKey: ["users", "technician-options"],
-    queryFn: listTechnicianOptions,
+    // Bare `listTechnicianOptions` (no wrapper) would hand React Query's own
+    // QueryFunctionContext to it as `params` — it now takes an optional
+    // params argument (used elsewhere for search/ids), so this must be
+    // invoked with an explicit empty call instead of passed by reference.
+    queryFn: () => listTechnicianOptions(),
   });
+  // Must cover the whole active catalog — resolves the intervention's
+  // contract_id/project_id to a name, so a partial page here means a
+  // contract or project beyond the cutoff silently falls back to "#<id>".
   const { data: contractsData } = useQuery({
     queryKey: ["contracts", "lookup-all"],
-    queryFn: () => listContracts({ page_size: 100 }),
+    queryFn: () => listContracts({ page_size: 500 }),
   });
   const { data: projectsData } = useQuery({
     queryKey: ["projects", "lookup-all"],
-    queryFn: () => listProjects({ page_size: 100 }),
+    queryFn: () => listProjects({ page_size: 500 }),
   });
 
   useEffect(() => {

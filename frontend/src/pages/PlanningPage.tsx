@@ -79,9 +79,12 @@ export default function PlanningPage() {
     queryKey: ["users", "technicians-select"],
     queryFn: () => listUsers({ role: "technician", page_size: 100 }),
   });
+  // page_size must cover the whole active catalog — feeds the create/edit
+  // form's ClientSelect and every calendar event's client label, so a
+  // partial page here means a client beyond the cutoff can't be scheduled.
   const { data: clientsData } = useQuery({
     queryKey: ["clients", "lookup-all"],
-    queryFn: () => listClients({ page_size: 100, active_only: true }),
+    queryFn: () => listClients({ page_size: 500, active_only: true }),
   });
   const clientNameById = new Map((clientsData?.items ?? []).map((c) => [c.id, c.client_name]));
   const technicianNameById = new Map(

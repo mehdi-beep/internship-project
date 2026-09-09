@@ -17,8 +17,15 @@ def list_users(db: Session, page: int, page_size: int, role: RoleName | None, ac
     return paginate(db, stmt, page, page_size)
 
 
-def list_technician_options(db: Session, search: str | None) -> list[User]:
-    stmt = user_repository.list_query(role=RoleName.TECHNICIAN, active_only=True, search=search)
+def list_technician_options(db: Session, search: str | None, ids: list[int] | None = None) -> list[User]:
+    # active_only is dropped whenever ids is given: this path also resolves an
+    # already-selected colleague technician back to a name (e.g. loading a
+    # saved intervention for edit), which must keep working even if that
+    # account was deactivated after being added — same reasoning as
+    # getTravail/getClient's by-id resolve not filtering on active either.
+    stmt = user_repository.list_query(
+        role=RoleName.TECHNICIAN, active_only=(ids is None), search=search, ids=ids
+    )
     return list(db.scalars(stmt).all())
 
 

@@ -30,7 +30,11 @@ def _to_page(result) -> Page[ContractOut]:
 @router.get("/contracts", response_model=ApiResponse[Page[ContractOut]])
 def list_contracts(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    # This is the unscoped, whole-catalog route — lookup dropdowns that need
+    # every contract (not just one client's) depend on this cap staying above
+    # the realistic total count. list_contracts_for_client below is the
+    # per-client variant and is capped separately.
+    page_size: int = Query(20, ge=1, le=500),
     client_id: int | None = None,
     status_filter: ContractStatus | None = Query(None, alias="status"),
     search: str | None = None,

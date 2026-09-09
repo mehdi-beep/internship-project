@@ -10,8 +10,8 @@ export async function fetchPage<T>(url: string, params: object): Promise<Page<T>
   return data.data;
 }
 
-export async function fetchOne<T>(url: string): Promise<T> {
-  const { data } = await apiClient.get<ApiResponse<T>>(url);
+export async function fetchOne<T>(url: string, params?: object): Promise<T> {
+  const { data } = await apiClient.get<ApiResponse<T>>(url, params ? { params } : undefined);
   if (!data.data) {
     throw new Error(data.message ?? "Request failed.");
   }
