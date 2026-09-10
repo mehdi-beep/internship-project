@@ -5,6 +5,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   CircularProgress,
   FormControlLabel,
   List,
@@ -135,9 +136,20 @@ export default function NotificationsPage() {
             >
               <ListItemText
                 primary={
-                  <Typography component="span" sx={{ fontWeight: notification.read ? 400 : 700 }}>
-                    {notification.title}
-                  </Typography>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <Typography component="span" sx={{ fontWeight: notification.read ? 400 : 700 }}>
+                      {notification.title}
+                    </Typography>
+                    {notification.is_still_actionable === false && (
+                      <Chip
+                        size="small"
+                        label="Resolved"
+                        color="default"
+                        variant="outlined"
+                        title="Someone else already completed this — no action needed from you."
+                      />
+                    )}
+                  </Stack>
                 }
                 secondary={
                   <>

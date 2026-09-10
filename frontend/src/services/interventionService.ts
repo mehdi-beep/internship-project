@@ -2,7 +2,7 @@ import { apiClient } from "../api/client";
 import { fetchOne, fetchPage, postOne, putOne } from "../api/queryHelpers";
 import type { ApiResponse } from "../types/auth";
 import type { InterventionStatus, InterventionType, LocationType } from "../types/enums";
-import type { Attachment, AuditLogEntry, Intervention, InterventionDetail } from "../types/intervention";
+import type { Attachment, AuditLogEntry, DemoDataStatus, Intervention, InterventionDetail } from "../types/intervention";
 
 export interface InterventionListParams {
   page?: number;
@@ -81,4 +81,16 @@ export async function deleteAttachment(attachmentId: number): Promise<void> {
 
 export function attachmentDownloadUrl(attachmentId: number): string {
   return `${apiClient.defaults.baseURL}/attachments/${attachmentId}/download`;
+}
+
+/** CEO-only. Registered server-side ahead of /interventions/{id} so the
+ * literal path segment is never mistaken for an intervention id. */
+export const getDemoDataStatus = () => fetchOne<DemoDataStatus>("/interventions/demo-data-count");
+
+export async function deleteDemoInterventions(): Promise<number> {
+  const { data } = await apiClient.delete<ApiResponse<{ deleted_count: number }>>("/interventions/demo-data");
+  if (!data.data) {
+    throw new Error(data.message ?? "Delete failed.");
+  }
+  return data.data.deleted_count;
 }

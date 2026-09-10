@@ -12,4 +12,9 @@ export interface Notification {
   related_planning_id: number | null;
   read: boolean;
   created_at: string;
+  // Whether the action this notification implies is still pending, based on
+  // the intervention's CURRENT status — not whether it's been read. null for
+  // notifications with nothing to resolve (a pure FYI, or nothing related).
+  // See backend NotificationOut.from_model for how this is computed.
+  is_still_actionable: boolean | null;
 }

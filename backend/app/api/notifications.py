@@ -31,7 +31,7 @@ def list_notifications(
     result = notification_service.list_notifications(db, current_user.id, page, page_size)
     return ApiResponse(
         data=Page(
-            items=[NotificationOut.model_validate(n) for n in result.items],
+            items=[NotificationOut.from_model(n) for n in result.items],
             total=result.total,
             page=result.page,
             page_size=result.page_size,
@@ -47,7 +47,7 @@ def mark_read(
     current_user: User = Depends(get_current_user),
 ) -> ApiResponse[NotificationOut]:
     notification = notification_service.mark_read(db, current_user.id, notification_id)
-    return ApiResponse(data=NotificationOut.model_validate(notification))
+    return ApiResponse(data=NotificationOut.from_model(notification))
 
 
 @router.patch("/read-all", response_model=ApiResponse[dict])

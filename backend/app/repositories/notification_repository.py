@@ -1,13 +1,18 @@
 from sqlalchemy import Select, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
+from app.models.intervention import Intervention
 from app.models.notification import Notification
 
 
 def list_query(user_id: int) -> Select:
-    # Ch.70 — unread-first, most recent first within each group.
+    # Ch.70 — unread-first, most recent first within each group. Eager-loads
+    # the related intervention (when there is one) so notification_service
+    # can compute is_still_actionable without a query per row — see
+    # notification_service.list_notifications.
     return (
         select(Notification)
+        .options(joinedload(Notification.related_intervention))
         .where(Notification.user_id == user_id)
         .order_by(Notification.read.asc(), Notification.created_at.desc())
     )

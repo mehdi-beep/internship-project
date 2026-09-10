@@ -11,13 +11,14 @@ from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.schemas.intervention import (
     AuditLogOut,
+    DemoDataStatusOut,
     InterventionCreate,
     InterventionDetailOut,
     InterventionOut,
     InterventionUpdate,
 )
 from app.schemas.pagination import Page
-from app.services import intervention_service
+from app.services import demo_cleanup_service, intervention_service
 
 router = APIRouter(prefix="/interventions", tags=["interventions"])
 
@@ -26,6 +27,38 @@ ALL_ROLES = ("technician", "chef_technicien", "admin_supervisor", "ceo")
 
 def _is_privileged(user: User) -> bool:
     return user.role.name in (RoleName.CHEF_TECHNICIEN, RoleName.ADMIN_SUPERVISOR, RoleName.CEO)
+
+
+# Registered BEFORE "/{intervention_id}" below, same reason point_rules.py's
+# "/settings" is registered before its own "/{rule_id}" — FastAPI/Starlette
+# matches routes in registration order, and "demo-data"/"demo-data-count"
+# would otherwise be swallowed by the path-param route first (failing its int
+# conversion) rather than reaching these handlers.
+#
+# CEO-only, not ALL_ROLES / admin_supervisor — this is a one-time, irreversible
+# cleanup of pre-cutoff seeded data (see demo_cleanup_service.py's module
+# docstring for why this exists and why it can never broaden to real
+# interventions), matching the CEO-exclusive gating already established by
+# GET /dashboard/ceo/charts (require_roles("ceo") alone, not the shared
+# admin_supervisor pattern used elsewhere).
+@router.get("/demo-data-count", response_model=ApiResponse[DemoDataStatusOut])
+def get_demo_data_status(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("ceo")),
+) -> ApiResponse[DemoDataStatusOut]:
+    return ApiResponse(data=DemoDataStatusOut.model_validate(demo_cleanup_service.get_status(db)))
+
+
+@router.delete("/demo-data", response_model=ApiResponse[dict])
+def delete_demo_data(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("ceo")),
+) -> ApiResponse[dict]:
+    deleted_count = demo_cleanup_service.delete_demo_interventions(db)
+    return ApiResponse(
+        message=f"Deleted {deleted_count} demo intervention(s) and all their dependent records.",
+        data={"deleted_count": deleted_count},
+    )
 
 
 @router.get("", response_model=ApiResponse[Page[InterventionOut]])

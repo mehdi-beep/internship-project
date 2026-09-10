@@ -146,3 +146,14 @@ class InterventionDetailOut(InterventionOut):
     approval_history: list[ApprovalHistoryOut] = []
     audit_log: list[AuditLogOut] = []
     colleague_technicians: list[InterventionTechnicianOut] = []
+
+
+class DemoDataStatusOut(BaseModel):
+    """CEO-only demo-data cleanup preview — what the confirmation dialog
+    needs before the action is committed to (see demo_cleanup_service.py)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    eligible_count: int
+    already_deleted: bool
+    deleted_at: datetime | None

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy.orm import Session
 
 from app.models.app_settings import AppSettings
@@ -35,3 +37,12 @@ def update_offset(db: Session, settings: AppSettings, offset_minutes: int) -> Ap
     db.commit()
     db.refresh(settings)
     return settings
+
+
+def mark_demo_interventions_deleted(db: Session, settings: AppSettings, when: datetime) -> None:
+    """Sets the one-time gate. Deliberately does not commit — the caller
+    (demo_cleanup_service.delete_demo_interventions) must set this in the same
+    transaction as the deletion itself, so a failure partway through the
+    delete can never leave the gate set with no data actually removed, or vice
+    versa."""
+    settings.demo_interventions_deleted_at = when

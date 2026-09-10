@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Box, Button, FormControlLabel, MenuItem, Stack, Switch, Tab, Tabs, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
 import dayjs from "dayjs";
 import DataTable, { type DataTableColumn } from "../components/DataTable";
+import DeleteDemoDataDialog from "../components/DeleteDemoDataDialog";
 import SearchBar from "../components/SearchBar";
 import StatusBadge from "../components/StatusBadge";
 import GenericCalendar, { type GenericCalendarEvent } from "../components/GenericCalendar";
 import ViewModeToggle, { type ViewMode } from "../components/ViewModeToggle";
 import { listClients } from "../services/clientService";
 import { listContracts } from "../services/contractService";
-import { listInterventions } from "../services/interventionService";
+import { deleteDemoInterventions, getDemoDataStatus, listInterventions } from "../services/interventionService";
 import { listProjects } from "../services/projectService";
 import { listSiteCities } from "../services/siteService";
 import { listTechnicianOptions } from "../services/userService";
@@ -40,8 +42,10 @@ const TYPE_LABELS: Record<InterventionType, string> = {
 
 export default function MyInterventionsPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const isTechnician = user?.role === "technician";
+  const isCeo = user?.role === "ceo";
 
   const [tabIndex, setTabIndex] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -244,6 +248,42 @@ export default function MyInterventionsPage() {
     },
   ];
 
+  // CEO-only, one-time, irreversible cleanup of pre-cutoff seeded/demo
+  // interventions — see backend/app/services/demo_cleanup_service.py's module
+  // docstring. This is deliberately NOT a general delete capability: the
+  // server enforces a fixed cutoff constant no request can move, and once run
+  // successfully the server-side flag permanently refuses a second run.
+  const [demoDeleteOpen, setDemoDeleteOpen] = useState(false);
+  const [demoDeleteError, setDemoDeleteError] = useState<string | null>(null);
+
+  const { data: demoDataStatus, isLoading: demoStatusLoading } = useQuery({
+    queryKey: ["interventions", "demo-data-status"],
+    queryFn: getDemoDataStatus,
+    enabled: isCeo && demoDeleteOpen,
+  });
+
+  const demoDeleteMutation = useMutation({
+    mutationFn: deleteDemoInterventions,
+    onSuccess: () => {
+      // Broad prefix invalidation — matches PlanningPage's own
+      // `invalidateQueries({ queryKey: ["planning"] })` pattern. Deleting
+      // demo interventions can shift counts/rows shown by the interventions
+      // list itself, every dashboard variant, planning/calendar, and any
+      // report currently open, so every one of those prefixes is invalidated
+      // rather than just the exact key this page happens to be using.
+      queryClient.invalidateQueries({ queryKey: ["interventions"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["planning"] });
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
+      setDemoDeleteOpen(false);
+      setDemoDeleteError(null);
+    },
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setDemoDeleteError(detail ?? "Failed to delete demo interventions. Please try again.");
+    },
+  });
+
   return (
     <Box>
       <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 2 }}>
@@ -255,6 +295,19 @@ export default function MyInterventionsPage() {
           {isTechnician && (
             <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate("/interventions/new")}>
               New Intervention
+            </Button>
+          )}
+          {isCeo && (
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<DeleteForeverIcon />}
+              onClick={() => {
+                setDemoDeleteError(null);
+                setDemoDeleteOpen(true);
+              }}
+            >
+              Delete all demo interventions
             </Button>
           )}
         </Stack>
@@ -468,6 +521,21 @@ export default function MyInterventionsPage() {
         <GenericCalendar
           events={calendarEvents}
           onVisibleRangeChange={(range) => setCalendarRange({ date_from: range.start, date_to: range.end })}
+        />
+      )}
+
+      {isCeo && (
+        <DeleteDemoDataDialog
+          open={demoDeleteOpen}
+          status={demoDataStatus ?? null}
+          statusLoading={demoStatusLoading}
+          loading={demoDeleteMutation.isPending}
+          errorMessage={demoDeleteError}
+          onConfirm={() => demoDeleteMutation.mutate()}
+          onCancel={() => {
+            setDemoDeleteOpen(false);
+            setDemoDeleteError(null);
+          }}
         />
       )}
     </Box>

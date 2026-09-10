@@ -28,6 +28,10 @@ def _create_submitted(client, tech_headers, refs):
     return client.post(f"/api/interventions/{created['id']}/submit", headers=tech_headers).json()["data"]
 
 
+def _notifications(client, headers):
+    return client.get("/api/notifications", headers=headers, params={"page_size": 100}).json()["data"]["items"]
+
+
 class TestRoleGating:
     def test_only_chef_can_technical_approve(self, client, auth_headers, refs):
         tech1 = auth_headers("tech01")
@@ -312,6 +316,112 @@ class TestApprovalWorkflowEmailsAreActuallyUsed:
         assert len(approval_emails) == 1
         tech1_email = client.get("/api/auth/me", headers=tech1).json()["data"]["email"]
         assert approval_emails[0]["To"] == tech1_email
+
+
+class TestNotificationReflectsCurrentEntityState:
+    """Bug report: Admin 1 and Admin 2 both get 'Administrative Approval
+    Needed' when a technician submits. If Admin 2 approves before Admin 1
+    ever logs in, Admin 1's copy must stop claiming approval is still
+    needed — it's the same underlying intervention, already resolved by
+    someone else. is_still_actionable is computed from the intervention's
+    CURRENT status on every fetch, not stored at creation time, so this is
+    true regardless of which admin (or how many) received a copy."""
+
+    def _find(self, notifications, title, intervention_id):
+        return next(
+            n for n in notifications if n["title"] == title and n["related_intervention_id"] == intervention_id
+        )
+
+    def test_administrative_approval_notification_resolves_for_other_admin(self, client, auth_headers, refs):
+        tech1 = auth_headers("tech01")
+        chef = auth_headers("chef01")
+        admin1 = auth_headers("admin01")
+        admin2 = auth_headers("admin02")
+        submitted = _create_submitted(client, tech1, refs)
+        client.post(f"/api/interventions/{submitted['id']}/technical-approval", json={"decision": "approved"}, headers=chef)
+
+        # Both admins received a copy, both still actionable — real starting
+        # state, not assumed.
+        title = "Administrative Approval Needed"
+        n1_before = self._find(_notifications(client, admin1), title, submitted["id"])
+        n2_before = self._find(_notifications(client, admin2), title, submitted["id"])
+        assert n1_before["is_still_actionable"] is True
+        assert n2_before["is_still_actionable"] is True
+
+        # admin2 acts. admin1 never logs in between — nothing about admin1's
+        # own account or notification row changes; only the intervention did.
+        client.post(
+            f"/api/interventions/{submitted['id']}/administrative-approval",
+            json={"decision": "approved"},
+            headers=admin2,
+        )
+
+        n1_after = self._find(_notifications(client, admin1), title, submitted["id"])
+        assert n1_after["is_still_actionable"] is False, "admin2 already approved it — admin1's copy must reflect that"
+        # read/unread is a completely separate axis — admin1 never opened it.
+        assert n1_after["read"] is False, "resolving the action must not silently mark it read behind the user's back"
+
+        # Clicking through still lands on the real intervention detail page,
+        # which will show the true fully_approved status — the notification
+        # list is what needed fixing, not the click destination.
+        intervention = client.get(f"/api/interventions/{submitted['id']}", headers=admin1).json()["data"]
+        assert intervention["status"] == "fully_approved"
+
+    def test_technical_approval_notification_resolves_for_other_chef(self, client, auth_headers, refs):
+        """Same principle, one level up: multiple Chefs all get 'Intervention
+        Submitted' when a technician submits; one Chef acting resolves it
+        for the others too."""
+        tech1 = auth_headers("tech01")
+        chef1 = auth_headers("chef01")
+        chef2 = auth_headers("chef02")
+        submitted = _create_submitted(client, tech1, refs)
+
+        title = "Intervention Submitted"
+        n_chef2_before = self._find(_notifications(client, chef2), title, submitted["id"])
+        assert n_chef2_before["is_still_actionable"] is True
+
+        client.post(f"/api/interventions/{submitted['id']}/technical-approval", json={"decision": "approved"}, headers=chef1)
+
+        n_chef2_after = self._find(_notifications(client, chef2), title, submitted["id"])
+        assert n_chef2_after["is_still_actionable"] is False, "chef1 already handled it — chef2's copy must reflect that"
+
+    def test_rejection_reverts_actionable_state_back_to_true(self, client, auth_headers, refs):
+        """If technical approval is REJECTED rather than approved, the
+        intervention goes back to a status outside PENDING_TECHNICAL_APPROVAL
+        too (it becomes 'rejected') — so the submission notification also
+        resolves, correctly: nobody still owes a technical-approval decision
+        on a rejected intervention, it needs the technician to fix and
+        resubmit first, which will create a fresh notification then."""
+        tech1 = auth_headers("tech01")
+        chef1 = auth_headers("chef01")
+        chef2 = auth_headers("chef02")
+        submitted = _create_submitted(client, tech1, refs)
+
+        client.post(
+            f"/api/interventions/{submitted['id']}/technical-approval",
+            json={"decision": "rejected", "comment": "Fix this."},
+            headers=chef1,
+        )
+
+        n_chef2 = self._find(_notifications(client, chef2), "Intervention Submitted", submitted["id"])
+        assert n_chef2["is_still_actionable"] is False
+
+    def test_informational_notifications_are_never_marked_actionable_or_stale(self, client, auth_headers, refs):
+        """'Intervention Rejected' and 'Intervention Approved' are pure FYI
+        to the technician — there's no action implied, so is_still_actionable
+        must be None (not True, not False) regardless of what the
+        intervention's current status is."""
+        tech1 = auth_headers("tech01")
+        chef = auth_headers("chef01")
+        admin = auth_headers("admin01")
+        submitted = _create_submitted(client, tech1, refs)
+        client.post(f"/api/interventions/{submitted['id']}/technical-approval", json={"decision": "approved"}, headers=chef)
+        client.post(
+            f"/api/interventions/{submitted['id']}/administrative-approval", json={"decision": "approved"}, headers=admin
+        )
+
+        approved_notification = self._find(_notifications(client, tech1), "Intervention Approved", submitted["id"])
+        assert approved_notification["is_still_actionable"] is None
 
 
 class TestMyRecentDecisions:

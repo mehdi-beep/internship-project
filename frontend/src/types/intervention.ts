@@ -86,3 +86,10 @@ export interface InterventionDetail extends Intervention {
   audit_log: AuditLogEntry[];
   colleague_technicians: InterventionTechnician[];
 }
+
+/** CEO-only demo-data cleanup preview (see demo_cleanup_service.py). */
+export interface DemoDataStatus {
+  eligible_count: number;
+  already_deleted: boolean;
+  deleted_at: string | null;
+}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Autocomplete, TextField } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { listTechnicianOptions } from "../services/userService";
@@ -71,7 +71,33 @@ export default function ColleagueTechnicianSelect({
   });
   for (const t of resolvedById ?? []) knownById.current.set(t.id, t);
 
-  const selected = value.map((id) => knownById.current.get(id)).filter((t): t is TechnicianOption => t != null);
+  // MUI's Autocomplete internally resets inputValue whenever its `value` prop
+  // is a *new array reference*, even when the contents are identical (see
+  // useAutocomplete's `value !== previousProps.value` check, and
+  // TravauxMultiSelect's identical fix/comment for the full mechanism) — a
+  // fresh `.map().filter()` array on every render meant every keystroke
+  // (which re-renders this component via onInputChange -> setInputValue)
+  // got immediately wiped by MUI's own reset effect. useMemo keeps the
+  // reference stable across renders that don't actually change the
+  // resolved selection.
+  //
+  // Dependency key: a signature of exactly which ids in `value` are
+  // currently resolvable in knownById, computed fresh every render — NOT
+  // `resolvedById` (or a key derived only from it). knownById is populated
+  // from TWO independent paths (the plain search-results loop above, and
+  // this by-ids resolve), and on a fresh page load either one can be the
+  // one that actually lands the id first depending on request timing —
+  // confirmed live: reloading the same saved intervention's edit page
+  // sometimes resolved the colleague via the unfiltered technician list
+  // finishing first, which a key derived only from `resolvedById` would
+  // never reflect, silently leaving the chip missing even though
+  // knownById.current already had the right entry.
+  const resolutionKey = value.map((id) => (knownById.current.has(id) ? id : "?")).join(",");
+  const selected = useMemo(
+    () => value.map((id) => knownById.current.get(id)).filter((t): t is TechnicianOption => t != null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- knownById is a ref, mutated in-render just above rather than through a setter, so it can't be listed as a dependency; resolutionKey is what makes this re-run whenever the actual resolved-ness of `value`'s ids changes, regardless of which path resolved them.
+    [value, resolutionKey],
+  );
 
   return (
     <Autocomplete

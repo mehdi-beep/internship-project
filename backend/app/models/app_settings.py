@@ -38,5 +38,14 @@ class AppSettings(Base):
     # that manual step is this design's explicit, accepted cost.
     company_utc_offset_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
 
+    # Set exactly once, by demo_cleanup_service.delete_demo_interventions, in
+    # the same transaction as the deletion itself — never re-derived, never
+    # cleared. This is the structural, permanent gate against a second run:
+    # the delete endpoint checks this is still None before doing anything, and
+    # the fact that a second run would also find zero matching rows (the
+    # cutoff is a fixed past constant, not a moving one) is treated as a
+    # secondary consequence, not the actual safety mechanism.
+    demo_interventions_deleted_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
