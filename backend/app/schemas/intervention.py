@@ -159,5 +159,6 @@ class DemoDataStatusOut(BaseModel):
     eligible_client_site_count: int
     eligible_contract_count: int
     eligible_project_count: int
+    eligible_legacy_travail_count: int
     already_deleted: bool
     deleted_at: datetime | None

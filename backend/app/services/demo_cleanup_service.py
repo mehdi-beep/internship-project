@@ -17,14 +17,30 @@ including the CEO.
 Also deletes demo-era Clients, Client Sites, Contracts, and Projects on the
 same cutoff, reusing deletion_service.detach_references's exact per-entity
 detach logic (inlined here without its internal commit, so everything stays
-one transaction) rather than duplicating it. Two entity types are
-deliberately excluded from this whole feature, by explicit instruction:
+one transaction) rather than duplicating it.
 
-- Travaux: the 58 real catalog entries stay exactly as they are — this
-  module never touches the travaux table at all.
-- Users: no user is ever deleted here. The CEO account is already
-  structurally undeletable (deletion_service.ensure_deletable), and every
-  other account's fate is a manual decision for later, not an automated one.
+Travaux cannot use the same created_at cutoff as everything else: both the
+58 real catalog entries (TRAVAUX_CATALOG) and the 125 legacy placeholder
+entries (LEGACY_PLACEHOLDER_TRAVAUX_CATALOG, seed.py) are inserted in the
+same seeding pass, at the same moment, so every travail row shares
+essentially the same created_at regardless of which catalog it came from —
+a cutoff comparison can't tell them apart. The two catalogs ARE reliably
+distinguishable on a different column: every real entry has category=None,
+every legacy entry has a real category string ('Network', 'Security',
+'Hardware', 'Telephony', 'Infrastructure') — confirmed with zero exceptions
+on either side against the actual seed data at the time this was added.
+`category` is a normal, freely admin-editable field (schemas/travail.py), so
+this is a one-time, data-shape-based selector that matches today's real data
+exactly, not a permanent structural guarantee — safe specifically because
+this whole feature is itself one-time and gated (see below), not something
+that could later misfire against a real travail an admin happens to tag with
+a category after this ships.
+
+One entity type is excluded from this feature unconditionally, by explicit
+instruction: Users. No user is ever deleted here — the CEO account is
+already structurally undeletable (deletion_service.ensure_deletable), and
+every other account's fate is a manual decision for later, not an automated
+one.
 
 `app_settings.demo_interventions_deleted_at` is the actual gate — set once,
 in the same transaction as the deletion, and never cleared. Even though a
@@ -58,6 +74,7 @@ from app.models.intervention_technician import InterventionTechnician
 from app.models.notification import Notification
 from app.models.planning import Planning
 from app.models.project import Project
+from app.models.travail import Travail
 from app.repositories import app_settings_repository
 from config import get_settings
 
@@ -85,6 +102,7 @@ class DemoDataStatus:
     eligible_client_site_count: int
     eligible_contract_count: int
     eligible_project_count: int
+    eligible_legacy_travail_count: int
     already_deleted: bool
     deleted_at: datetime | None
 
@@ -96,6 +114,12 @@ def _ids_before_cutoff(db: Session, model, created_at_column) -> list[int]:
 
 def _demo_intervention_ids(db: Session) -> list[int]:
     return _ids_before_cutoff(db, Intervention, Intervention.created_at)
+
+
+def _legacy_travail_ids(db: Session) -> list[int]:
+    """Selected by category, not DEMO_DATA_CUTOFF — see this module's
+    docstring for why created_at can't distinguish the two travaux catalogs."""
+    return list(db.scalars(select(Travail.id).where(Travail.category.is_not(None))).all())
 
 
 def _get_settings_without_committing(db: Session):
@@ -121,12 +145,16 @@ def _count_before_cutoff(db: Session, model, created_at_column) -> int:
 
 def get_status(db: Session) -> DemoDataStatus:
     settings = _get_settings_without_committing(db)
+    legacy_travail_count = db.scalar(
+        select(func.count()).select_from(Travail).where(Travail.category.is_not(None))
+    ) or 0
     return DemoDataStatus(
         eligible_count=_count_before_cutoff(db, Intervention, Intervention.created_at),
         eligible_client_count=_count_before_cutoff(db, Client, Client.created_at),
         eligible_client_site_count=_count_before_cutoff(db, ClientSite, ClientSite.created_at),
         eligible_contract_count=_count_before_cutoff(db, Contract, Contract.created_at),
         eligible_project_count=_count_before_cutoff(db, Project, Project.created_at),
+        eligible_legacy_travail_count=legacy_travail_count,
         already_deleted=settings.demo_interventions_deleted_at is not None,
         deleted_at=settings.demo_interventions_deleted_at,
     )
@@ -179,6 +207,7 @@ def delete_demo_interventions(db: Session) -> int:
         # gate, matching "running this twice should be safe" while still
         # permanently closing the door (Ch. one-time-gate requirement).
         _delete_demo_reference_data(db)
+        _delete_legacy_travaux(db)
         app_settings_repository.mark_demo_interventions_deleted(db, settings, datetime.now(timezone.utc))
         db.commit()
         return 0
@@ -226,10 +255,29 @@ def delete_demo_interventions(db: Session) -> int:
     )
 
     _delete_demo_reference_data(db)
+    _delete_legacy_travaux(db)
 
     app_settings_repository.mark_demo_interventions_deleted(db, settings, datetime.now(timezone.utc))
     db.commit()
     return deleted_count
+
+
+def _delete_legacy_travaux(db: Session) -> None:
+    """The 125 legacy placeholder travaux (category is not None — see this
+    module's docstring for why category, not created_at, is the selector
+    here). Join rows only, deleted first — same reasoning as
+    deletion_service.detach_references's own `travail` branch: an
+    intervention_tasks row with no travail carries no information at all.
+    By the time this runs, every demo Intervention is already deleted above,
+    so in practice this affects zero surviving rows against today's real
+    data (confirmed: no real intervention has ever used a legacy travail) —
+    handled defensively anyway rather than assumed, matching the same
+    caution already applied to every other detach in this module."""
+    legacy_ids = _legacy_travail_ids(db)
+    if not legacy_ids:
+        return
+    db.query(InterventionTask).filter(InterventionTask.travail_id.in_(legacy_ids)).delete(synchronize_session=False)
+    db.query(Travail).filter(Travail.id.in_(legacy_ids)).delete(synchronize_session=False)
 
 
 def _delete_demo_reference_data(db: Session) -> None:

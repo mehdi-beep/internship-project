@@ -88,14 +88,16 @@ export interface InterventionDetail extends Intervention {
 }
 
 /** CEO-only demo-data cleanup preview (see demo_cleanup_service.py). Covers
- * Interventions, Clients, Client Sites, Contracts, and Projects — Travaux
- * and Users are deliberately excluded from this feature entirely. */
+ * Interventions, Clients, Client Sites, Contracts, Projects, and the 125
+ * legacy placeholder travaux (the 58 real catalog entries are always kept).
+ * Users are the one entity type excluded from this feature entirely. */
 export interface DemoDataStatus {
   eligible_count: number;
   eligible_client_count: number;
   eligible_client_site_count: number;
   eligible_contract_count: number;
   eligible_project_count: number;
+  eligible_legacy_travail_count: number;
   already_deleted: boolean;
   deleted_at: string | null;
 }

@@ -105,10 +105,12 @@ export default function DeleteDemoDataDialog({
                 <li>{status?.eligible_client_site_count ?? 0} client site(s)</li>
                 <li>{status?.eligible_contract_count ?? 0} contract(s)</li>
                 <li>{status?.eligible_project_count ?? 0} project(s)</li>
+                <li>{status?.eligible_legacy_travail_count ?? 0} legacy placeholder travail entry/entries</li>
               </Box>
               Notifications and planning entries that referenced any of these are kept, only with that
-              reference cleared. <strong>Travaux and Users are never touched by this action</strong> — the
-              real travaux catalog stays exactly as it is, and no user account is ever deleted here.
+              reference cleared. <strong>The real travaux catalog and every user account are never touched
+              by this action</strong> — only the legacy placeholder travaux (identified by having a
+              category set) are removed; no user is ever deleted here.
             </Alert>
           )}
 
@@ -124,8 +126,8 @@ export default function DeleteDemoDataDialog({
                 <Typography variant="body2">
                   This action only ever applies to the fixed set of records that existed before this
                   feature shipped. Nothing created afterward can be reached by this or any other deletion
-                  path, for any role — and Travaux/Users are excluded from this action entirely, regardless
-                  of when they were created.
+                  path, for any role — the real travaux catalog and every user account are excluded from
+                  this action entirely, regardless of when they were created.
                 </Typography>
               </Alert>
               <Box>

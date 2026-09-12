@@ -529,25 +529,62 @@ class TestReferenceDataScope:
         assert client.get(f"/api/contracts/{contract['id']}", headers=admin).status_code == 404
         assert client.get(f"/api/projects/{project['id']}", headers=admin).status_code == 404
 
-    def test_real_travaux_and_users_are_never_touched(self, client, auth_headers):
-        """The explicit exclusion: no matter how old a Travail or a User row
-        is, this action must never delete or otherwise remove either."""
+    def test_users_are_never_touched(self, client, auth_headers):
+        """The one unconditional exclusion: no matter how old a User row is,
+        this action must never delete or otherwise remove it."""
         admin = auth_headers("admin01")
         ceo = _ceo(auth_headers)
 
-        # /api/users caps page_size at 100 (unlike /api/travaux, deliberately
-        # raised to 500 elsewhere this session) — 100 is comfortably above
-        # the ~14 seeded accounts, so this still reads the true total.
-        travaux_before = client.get("/api/travaux", headers=admin, params={"page_size": 500}).json()["data"]["total"]
+        # /api/users caps page_size at 100 — comfortably above the ~14
+        # seeded accounts, so this still reads the true total.
         users_before = client.get("/api/users", headers=admin, params={"page_size": 100}).json()["data"]["total"]
 
         client.delete("/api/interventions/demo-data", headers=ceo)
 
-        travaux_after = client.get("/api/travaux", headers=admin, params={"page_size": 500}).json()["data"]["total"]
         users_after = client.get("/api/users", headers=admin, params={"page_size": 100}).json()["data"]["total"]
-
-        assert travaux_after == travaux_before
         assert users_after == users_before
+
+    def test_real_travaux_survive_and_legacy_placeholder_travaux_are_deleted(self, client, auth_headers):
+        """The real catalog (category=None, seeded as TRAVAUX_CATALOG) must
+        survive completely intact. The legacy placeholder catalog
+        (category set, LEGACY_PLACEHOLDER_TRAVAUX_CATALOG) must be deleted —
+        this is the one entity where the selector is category, not
+        created_at, since both catalogs are seeded at the same moment (see
+        demo_cleanup_service.py's module docstring)."""
+        admin = auth_headers("admin01")
+        ceo = _ceo(auth_headers)
+
+        all_travaux = client.get("/api/travaux", headers=admin, params={"page_size": 500}).json()["data"]["items"]
+        real_before = [t for t in all_travaux if t["category"] is None]
+        legacy_before = [t for t in all_travaux if t["category"] is not None]
+        assert real_before, "seed data must include at least one real (category=None) travail"
+        assert legacy_before, "seed data must include at least one legacy (category set) travail"
+
+        response = client.delete("/api/interventions/demo-data", headers=ceo)
+        assert response.status_code == 200, response.text
+
+        all_travaux_after = client.get(
+            "/api/travaux", headers=admin, params={"page_size": 500}
+        ).json()["data"]["items"]
+        ids_after = {t["id"] for t in all_travaux_after}
+
+        assert {t["id"] for t in real_before} <= ids_after, "every real travail must survive"
+        assert ids_after.isdisjoint({t["id"] for t in legacy_before}), "every legacy travail must be gone"
+        assert len(all_travaux_after) == len(real_before)
+
+    def test_preview_reports_legacy_travail_count(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        ceo = _ceo(auth_headers)
+
+        legacy_count = len(
+            [
+                t
+                for t in client.get("/api/travaux", headers=admin, params={"page_size": 500}).json()["data"]["items"]
+                if t["category"] is not None
+            ]
+        )
+        status = client.get("/api/interventions/demo-data-count", headers=ceo).json()["data"]
+        assert status["eligible_legacy_travail_count"] == legacy_count
 
     def test_reference_data_created_after_cutoff_survives(self, client, auth_headers):
         """The same forward-only-cutoff guarantee already proven for
