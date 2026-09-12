@@ -72,7 +72,7 @@ export default function DeleteDemoDataDialog({
     <Dialog open={open} onClose={loading ? undefined : onCancel} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, color: "error.main" }}>
         <DeleteForeverIcon color="error" />
-        Delete all demo interventions
+        Delete all demo data
       </DialogTitle>
       <DialogContent>
         <Stack spacing={2}>
@@ -96,11 +96,19 @@ export default function DeleteDemoDataDialog({
           {!statusLoading && !alreadyDeleted && step === 1 && (
             <Alert severity="warning" icon={<WarningAmberIcon />}>
               <AlertTitle>Step 1 of 2 — what this deletes</AlertTitle>
-              This will permanently delete <strong>{status?.eligible_count ?? 0} intervention(s)</strong> created
-              before this feature shipped, treated as seeded demo data, along with all of their approval
-              history, attachments (including the uploaded files themselves), and audit trail entries.
-              Notifications and planning entries that referenced one of these interventions are kept, only
-              with that reference cleared.
+              This will permanently delete everything created before this feature shipped, treated as
+              seeded demo data:
+              <Box component="ul" sx={{ mt: 1, mb: 1, pl: 2.5 }}>
+                <li>{status?.eligible_count ?? 0} intervention(s), with all of their approval history,
+                  attachments (including the uploaded files themselves), and audit trail entries</li>
+                <li>{status?.eligible_client_count ?? 0} client(s)</li>
+                <li>{status?.eligible_client_site_count ?? 0} client site(s)</li>
+                <li>{status?.eligible_contract_count ?? 0} contract(s)</li>
+                <li>{status?.eligible_project_count ?? 0} project(s)</li>
+              </Box>
+              Notifications and planning entries that referenced any of these are kept, only with that
+              reference cleared. <strong>Travaux and Users are never touched by this action</strong> — the
+              real travaux catalog stays exactly as it is, and no user account is ever deleted here.
             </Alert>
           )}
 
@@ -109,14 +117,15 @@ export default function DeleteDemoDataDialog({
               <Alert severity="error" icon={<WarningAmberIcon />}>
                 <AlertTitle>Step 2 of 2 — this cannot be undone</AlertTitle>
                 <Typography variant="body2" sx={{ mb: 1 }}>
-                  There is no confirmation after this. Once deleted, these {status?.eligible_count ?? 0}{" "}
-                  intervention(s) and their history are gone from the database permanently — this is not a
-                  deactivation and cannot be reversed from the application.
+                  There is no confirmation after this. Once deleted, these records and their history are
+                  gone from the database permanently — this is not a deactivation and cannot be reversed
+                  from the application.
                 </Typography>
                 <Typography variant="body2">
-                  This action only ever applies to the fixed set of interventions that existed before this
-                  feature shipped. No intervention created afterward can be reached by this or any other
-                  deletion path, for any role.
+                  This action only ever applies to the fixed set of records that existed before this
+                  feature shipped. Nothing created afterward can be reached by this or any other deletion
+                  path, for any role — and Travaux/Users are excluded from this action entirely, regardless
+                  of when they were created.
                 </Typography>
               </Alert>
               <Box>

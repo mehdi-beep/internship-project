@@ -266,15 +266,22 @@ export default function MyInterventionsPage() {
     mutationFn: deleteDemoInterventions,
     onSuccess: () => {
       // Broad prefix invalidation — matches PlanningPage's own
-      // `invalidateQueries({ queryKey: ["planning"] })` pattern. Deleting
-      // demo interventions can shift counts/rows shown by the interventions
-      // list itself, every dashboard variant, planning/calendar, and any
-      // report currently open, so every one of those prefixes is invalidated
-      // rather than just the exact key this page happens to be using.
+      // `invalidateQueries({ queryKey: ["planning"] })` pattern. This action
+      // now also deletes demo Clients/Sites/Contracts/Projects (not just
+      // Interventions), so every list/lookup/dropdown query built on any of
+      // those five entities is invalidated, not just the exact key this page
+      // happens to be using — includes every "lookup-all"/"select-all"
+      // dropdown query (ClientSelect, SiteSelect, TravauxMultiSelect's
+      // sibling entities) so a stale pre-cutoff row can't linger in a
+      // dropdown after this runs.
       queryClient.invalidateQueries({ queryKey: ["interventions"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["planning"] });
       queryClient.invalidateQueries({ queryKey: ["reports"] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["sites"] });
+      queryClient.invalidateQueries({ queryKey: ["contracts"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
       setDemoDeleteOpen(false);
       setDemoDeleteError(null);
     },

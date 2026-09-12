@@ -56,7 +56,10 @@ def delete_demo_data(
 ) -> ApiResponse[dict]:
     deleted_count = demo_cleanup_service.delete_demo_interventions(db)
     return ApiResponse(
-        message=f"Deleted {deleted_count} demo intervention(s) and all their dependent records.",
+        message=(
+            f"Deleted {deleted_count} demo intervention(s) and all their dependent records, "
+            "along with demo-era clients, client sites, contracts, and projects."
+        ),
         data={"deleted_count": deleted_count},
     )
 

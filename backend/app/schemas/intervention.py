@@ -155,5 +155,9 @@ class DemoDataStatusOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     eligible_count: int
+    eligible_client_count: int
+    eligible_client_site_count: int
+    eligible_contract_count: int
+    eligible_project_count: int
     already_deleted: bool
     deleted_at: datetime | None

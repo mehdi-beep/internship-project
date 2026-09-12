@@ -451,3 +451,159 @@ class TestOneTimeGate:
         status = client.get("/api/interventions/demo-data-count", headers=ceo).json()["data"]
         assert status["already_deleted"] is True
         assert status["deleted_at"] is not None
+
+
+def _backdate_row(model_name: str, row_id: int, when=None) -> None:
+    """Same purpose as _backdate above, generalised to any of the four
+    reference-data models this scope extension covers."""
+    from app.database.session import SessionLocal
+    from app.models.client import Client
+    from app.models.client_site import ClientSite
+    from app.models.contract import Contract
+    from app.models.project import Project
+
+    models = {"client": Client, "client_site": ClientSite, "contract": Contract, "project": Project}
+    model = models[model_name]
+    value = when if when is not None else _before_cutoff_naive()
+    db = SessionLocal()
+    try:
+        db.query(model).filter(model.id == row_id).update({model.created_at: value}, synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
+
+
+class TestReferenceDataScope:
+    """Clients/Sites/Contracts/Projects were added to this feature's scope
+    after the intervention-only version shipped — per explicit instruction,
+    Travaux and Users must never be touched by it, regardless of age."""
+
+    def test_preview_reports_all_four_reference_counts(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        ceo = _ceo(auth_headers)
+
+        created = client.post("/api/clients", json={"client_name": "Demo Scope Co"}, headers=admin).json()["data"]
+        _backdate_row("client", created["id"])
+
+        status = client.get("/api/interventions/demo-data-count", headers=ceo).json()["data"]
+        assert status["eligible_client_count"] >= 1
+        # Fields must exist even at zero — the frontend dialog renders all
+        # four unconditionally, so a missing key would be a real regression,
+        # not just an inaccurate count.
+        for key in ("eligible_client_site_count", "eligible_contract_count", "eligible_project_count"):
+            assert key in status
+
+    def test_delete_removes_backdated_client_site_contract_project(self, client, auth_headers):
+        admin = auth_headers("admin01")
+        ceo = _ceo(auth_headers)
+
+        client_row = client.post("/api/clients", json={"client_name": "Scope Client"}, headers=admin).json()["data"]
+        _backdate_row("client", client_row["id"])
+
+        site = client.post(
+            "/api/sites",
+            json={"client_id": client_row["id"], "site_name": "Scope Site", "city": "Casablanca"},
+            headers=admin,
+        ).json()["data"]
+        _backdate_row("client_site", site["id"])
+
+        contract = client.post(
+            "/api/contracts",
+            json={"client_id": client_row["id"], "contract_name": "Scope Contract", "start_date": "2026-01-01"},
+            headers=admin,
+        ).json()["data"]
+        _backdate_row("contract", contract["id"])
+
+        project = client.post(
+            "/api/projects",
+            json={"client_id": client_row["id"], "project_name": "Scope Project", "start_date": "2026-01-01"},
+            headers=admin,
+        ).json()["data"]
+        _backdate_row("project", project["id"])
+
+        response = client.delete("/api/interventions/demo-data", headers=ceo)
+        assert response.status_code == 200, response.text
+
+        assert client.get(f"/api/clients/{client_row['id']}", headers=admin).status_code == 404
+        assert client.get(f"/api/sites/{site['id']}", headers=admin).status_code == 404
+        assert client.get(f"/api/contracts/{contract['id']}", headers=admin).status_code == 404
+        assert client.get(f"/api/projects/{project['id']}", headers=admin).status_code == 404
+
+    def test_real_travaux_and_users_are_never_touched(self, client, auth_headers):
+        """The explicit exclusion: no matter how old a Travail or a User row
+        is, this action must never delete or otherwise remove either."""
+        admin = auth_headers("admin01")
+        ceo = _ceo(auth_headers)
+
+        # /api/users caps page_size at 100 (unlike /api/travaux, deliberately
+        # raised to 500 elsewhere this session) — 100 is comfortably above
+        # the ~14 seeded accounts, so this still reads the true total.
+        travaux_before = client.get("/api/travaux", headers=admin, params={"page_size": 500}).json()["data"]["total"]
+        users_before = client.get("/api/users", headers=admin, params={"page_size": 100}).json()["data"]["total"]
+
+        client.delete("/api/interventions/demo-data", headers=ceo)
+
+        travaux_after = client.get("/api/travaux", headers=admin, params={"page_size": 500}).json()["data"]["total"]
+        users_after = client.get("/api/users", headers=admin, params={"page_size": 100}).json()["data"]["total"]
+
+        assert travaux_after == travaux_before
+        assert users_after == users_before
+
+    def test_reference_data_created_after_cutoff_survives(self, client, auth_headers):
+        """The same forward-only-cutoff guarantee already proven for
+        Interventions (TestCutoffBoundaryIsReal), extended to a reference
+        entity: a client created through the normal API today is never
+        backdated, so it must survive this action untouched."""
+        admin = auth_headers("admin01")
+        ceo = _ceo(auth_headers)
+
+        real_client = client.post(
+            "/api/clients", json={"client_name": "Genuinely Real Client"}, headers=admin
+        ).json()["data"]
+
+        client.delete("/api/interventions/demo-data", headers=ceo)
+
+        assert client.get(f"/api/clients/{real_client['id']}", headers=admin).status_code == 200
+
+    def test_client_deletion_detaches_rather_than_orphans_a_surviving_intervention(self, client, auth_headers):
+        """A real (post-cutoff) intervention pointing at a demo (pre-cutoff)
+        client must survive with client_id cleared, not be silently broken —
+        the same detach-not-destroy guarantee deletion_service.py already
+        provides for a single manual client deletion, now proven under the
+        bulk demo-cleanup path too."""
+        admin = auth_headers("admin01")
+        tech = auth_headers("tech01")
+        ceo = _ceo(auth_headers)
+        refs = _refs(client, admin)
+
+        demo_client = client.post("/api/clients", json={"client_name": "Doomed Client"}, headers=admin).json()["data"]
+        _backdate_row("client", demo_client["id"])
+
+        site = client.post(
+            "/api/sites",
+            json={"client_id": demo_client["id"], "site_name": "Doomed Site", "city": "Rabat"},
+            headers=admin,
+        ).json()["data"]
+        # Site deliberately NOT backdated — real data referencing a demo
+        # client, the exact scenario the defensive detach in
+        # _delete_demo_reference_data exists for.
+
+        create_response = client.post(
+            "/api/interventions",
+            # site_id must genuinely belong to client_id — the site just
+            # created above under demo_client, not refs's own unrelated site.
+            json={**_payload(refs), "client_id": demo_client["id"], "site_id": site["id"]},
+            headers=tech,
+        )
+        assert create_response.status_code == 200, create_response.text
+        created = create_response.json()["data"]
+        # Intervention also left un-backdated — real data.
+
+        response = client.delete("/api/interventions/demo-data", headers=ceo)
+        assert response.status_code == 200, response.text
+
+        surviving_intervention = client.get(f"/api/interventions/{created['id']}", headers=admin).json()["data"]
+        assert surviving_intervention["client_id"] is None
+
+        surviving_site = client.get(f"/api/sites/{site['id']}", headers=admin).json()["data"]
+        assert surviving_site["client_id"] is None
